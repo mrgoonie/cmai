@@ -1,0 +1,29 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  # - repo: .
+  #   rev: HEAD
+  #   hooks:
+  #     - id: prepare-commit-msg-cc-ai
+  #       verbose: true
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        verbose: true
+      - id: end-of-file-fixer
+        verbose: true
+      - id: check-yaml
+        verbose: true
+      - id: check-added-large-files
+        verbose: true
+      - id: check-merge-conflict
+        verbose: true
+      - id: check-symlinks
+        verbose: true
+      - id: detect-private-key
+        verbose: true
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck

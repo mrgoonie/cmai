@@ -1,0 +1,60 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
+{
+	"name": "Python 3",
+	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+	"image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye",
+	"containerEnv": {
+		"PRE_COMMIT_HOME": ".pre-commit"
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/python:1": {
+			"installTools": true,
+			"toolsToInstall": "pre-commit",
+			"version": "3.12"
+		},
+		"ghcr.io/deepspacecartel/devcontainers-features/starship:latest": {
+			"version": "latest"
+		}
+	},
+	"customizations": {
+		"vscode": {
+			"settings": {
+        "dotfiles.repository":"deepspacecartel/dotfiles",
+				"remote.extensionKind": {
+					"ms-azuretools.vscode-docker": "ui"
+				}
+			},
+			// <!-- prettier-ignore-start -->
+			"extensions": [
+				// Code Formatting
+				"esbenp.prettier-vscode",
+				"streetsidesoftware.code-spell-checker",
+				// GitHub Integration
+				"GitHub.copilot",
+				"GitHub.vscode-github-actions",
+				"GitHub.vscode-pull-request-github",
+				// File Headers
+				"psioniq.psi-header",
+				// YAML Support
+				"redhat.vscode-yaml",
+				// Markdown Support
+				"bierner.github-markdown-preview",
+				"bierner.markdown-checkbox",
+				"bierner.markdown-footnotes",
+				"bierner.markdown-mermaid",
+				"bierner.markdown-preview-github-styles",
+				"bierner.markdown-yaml-preamble",
+				"chintans98.markdown-jira",
+				"yzhang.markdown-all-in-one",
+				// Task Management
+				"Gruntfuggly.todo-tree",
+				"wayou.vscode-todo-highlight",
+				// Development Tools
+				"Codeium.codeium",
+				"ryanluker.vscode-coverage-gutters"
+			]
+			// <!-- prettier-ignore-end -->
+		}
+	}
+}

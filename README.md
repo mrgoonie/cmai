@@ -1,10 +1,20 @@
-# `cmai` - AI Commit Message Generator
+# `prepare-commit-msg-cc-ai` - AI Conventional Commits Message Generator
 
-A command-line tool that automatically generates conventional commit messages using AI, based on your staged git changes.
+Tired of manual commit messages?
+
+[![Git Commit](https://imgs.xkcd.com/comics/git_commit.png)](https://xkcd.com/1296/)
+
+Welcome git hook that automatically generates conventional commit messages using AI, based on your staged git changes.
 
 Your commit messages will look like this:
 
-![Example Git Commit Messages](./example-commit-message.png)
+<!-- TODO: @alexanderilyin: Add example commit message screenshot -->
+
+## Attribution
+
+- [`mrgoonie/cmai.git`](https://github.com/mrgoonie/cmai) for the original shell script.
+- [OpenRouter](https://openrouter.ai/) for providing the AI API.
+- [Conventional Commits](https://www.conventionalcommits.org/) for the commit message format.
 
 ## Features
 
@@ -18,243 +28,94 @@ Your commit messages will look like this:
 
 ## Prerequisites
 
-- Git installed and configured
-- For Windows: Git Bash or WSL installed
-- For Linux/macOS: Bash shell environment
+- `git` installed and configured
+- `pre-commit` installed and configured
+- `jq` installed
+  - Used for escaping JSON
 - An [OpenRouter](https://openrouter.ai/) API key
 - `curl` installed
 
 ## Installation
 
-### Linux/macOS
-
-1. Clone this repository: 
+Export API key for https://openrouter.ai/
 
 ```bash
-git clone https://github.com/mrgoonie/cmai.git
-cd cmai
+ export OPENROUTER_API_KEY=...
 ```
 
-2. Run the installation script:
+1. Install [`pre-commit`](https://pre-commit.com/#install).
+2. Add hook configuration to `.pre-commit-config.yaml`.
+   ```yaml
+   # See https://pre-commit.com for more information
+   # See https://pre-commit.com/hooks.html for more hooks
+   repos:
+     - repo: https://github.com/partcad/cmai
+       rev: main
+       hooks:
+         - id: prepare-commit-msg-cc-ai
+   ```
 
-```bash
-./install.sh
-```
+By default only filenames collected using `git diff --cached --name-status` will be sent to OpenRouter. If you want to
+share commit diff using `git diff --cached` with OpenRouter and get more detailed commit message then you can use
+`--open-source` option. There is also `--debug` option for troubleshooting.
 
-This will:
-- Create necessary directories
-- Install the script globally as `cmai`
-- Set up proper permissions
+> If you set custom `args` you will have to provide `--commit-msg-filename` as last argument.
 
-### Windows
-
-1. Clone this repository:
-
-```bash
-git clone https://github.com/mrgoonie/cmai.git
-cd cmai
-```
-
-2. Run the installation script in Git Bash:
-
-```bash
-./install.sh
-```
-
-Or manually:
-- Copy `git-commit.sh` to `%USERPROFILE%\git-commit-ai\`
-- Add the directory to your PATH environment variable
-- Rename `git-commit.sh` to `cmai.sh`
-
-This will:
-- Create necessary directories
-- Install the script globally as `cmai`
-- Set up proper permissions
-
-## Configuration
-
-Set up your OpenRouter API key:
-
-```bash
-cmai <your_openrouter_api_key>
-```
-
-The API key will be securely stored in:
-- Linux/macOS: `~/.config/git-commit-ai/config`
-- Windows: `%USERPROFILE%\.config\git-commit-ai\config`
-
-## Usage
-
-![Usage Demonstration](./usage.png)
-
-1. Make your code changes
-2. Generate commit message and commit changes:
-
-```bash
-cmai
-```
-
-To also push changes to remote:
-```bash
-cmai --push
-# or
-cmai -p
-```
-
-To use a different AI model:
-```bash
-cmai --model qwen/qwen-2.5-coder-32b-instruct
-```
-
-List of available models: https://openrouter.ai/models
-
-This will:
-- Stage all changes
-- Generate a commit message using AI
-- Commit the changes
-- Push to the remote repository (if --push flag is used)
-
-### Debug Mode
-
-To see detailed information about what's happening:
-
-```bash
-cmai --debug
-```
-
-You can combine flags:
-```bash
-cmai --debug --push
-```
-
-## Examples
-
-```bash
-# First time setup with API key
-cmai your_openrouter_api_key
-
-# Normal usage
-cmai
-
-# Commit and push
-cmai --push
-
-# Debug mode
-cmai --debug
-
-# Debug mode with push
-cmai --debug --push
-
-# Use a different AI model
-cmai --model qwen/qwen-2.5-coder-32b-instruct
-
-# Combine multiple flags
-cmai --debug --push --model qwen/qwen-2.5-coder-32b-instruct
-```
-
-Example generated commit messages:
-- `feat(api): add user authentication system`
-- `fix(data): resolve memory leak in data processing`
-- `docs(api): update API documentation`
-- `style(ui): improve responsive layout for mobile devices`
-
-## Directory Structure
-
-### Linux/macOS
-
-```
-~
-├── git-commit-ai/
-│ └── git-commit.sh
-├── .config/
-│ └── git-commit-ai/
-│ └── config
-└── usr/
-└── local/
-└── bin/
-└── cmai -> ~/git-commit-ai/git-commit.sh
-```
-
-### Windows
-
-```
-%USERPROFILE%
-├── git-commit-ai/
-│ └── cmai.sh
-└── .config/
-└── git-commit-ai/
-└── config
+```yaml
+- id: prepare-commit-msg-cc-ai
+  args: [
+     "--debug",
+     "--open-source",
+     "--commit-msg-filename",
+]
 ```
 
 ## Security
 
-- API key is stored locally with restricted permissions (600)
-- Configuration directory is protected (700)
+- API key is stored in environment variable
 - No data is stored or logged except the API key
 - All communication is done via HTTPS
 
-## Troubleshooting
-
-1. **No API key found**
-   - Run `cmai your_openrouter_api_key` to configure
-
-2. **Permission denied**
-   - Check file permissions: `ls -la ~/.config/git-commit-ai`
-   - Should show: `drwx------` for directory and `-rw-------` for config file
-
-3. **Debug mode**
-   - Run with `--debug` flag to see detailed logs
-   - Check API responses and git operations
-
-4. **Windows-specific issues**
-   - Make sure Git Bash is installed
-   - Check if curl is available in Git Bash
-   - Verify PATH environment variable includes the installation directory
-
 ## Uninstallation
 
-### Linux/macOS
+- [`pre-commit uninstall`](https://pre-commit.com/#pre-commit-uninstall)
+
+## Development
+
+Consider reading at least following docs for `pre-commit`:
+
+- [Creating new hooks](https://pre-commit.com/#new-hooks)
+- [Supported git hooks - `prepare-commit-msg`](https://pre-commit.com/#prepare-commit-msg)
+- [Creating new hooks - `stages`](https://pre-commit.com/#hooks-stages)
+
+You can use following snippet for local testing:
 
 ```bash
-bash
-sudo rm /usr/local/bin/cmai
-rm -rf ~/git-commit-ai
-rm -rf ~/.config/git-commit-ai
+# Stage some changes
+git add .
+
+# Trigger hook
+pre-commit try-repo \
+   --verbose \
+   --hook-stage=prepare-commit-msg \
+   --commit-msg-filename=$(mktemp) \
+   . \
+   prepare-commit-msg-cc-ai \
+   --verbose \
+   --all-files \
 ```
-
-### Windows
-
-```bash
-rm -rf "$USERPROFILE/git-commit-ai"
-rm -rf "$USERPROFILE/.config/git-commit-ai"
-```
-Then remove the directory from your PATH environment variable
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes (using `cmai` 😉)
-4. Push to the branch
-5. Create a Pull Request
 
 ## License
 
 MIT License - see LICENSE file for details
 
-## Acknowledgments
+## Roadmap
 
-- [OpenRouter](https://openrouter.ai/) for providing the AI API
-- [Conventional Commits](https://www.conventionalcommits.org/) for the commit message format
+- [ ] Allow override user prompt.
+- [ ] Allow override system prompt.
+- [ ] Allow direct usage of LLMs.
+- [x] Add GitHub stars chart.
 
-## My other products
+## Star History
 
-- [DigiCord AI](https://digicord.site) - The Most Useful AI Chatbot on Discord
-- [IndieBacklink.com](https://indiebacklink.com) - Indie Makers Unite: Feature, Support, Succeed
-- [TopRanking.ai](https://topranking.ai) - AI Directory, listing AI products
-- [ZII.ONE](https://zii.one) - Personalized Link Shortener
-- [VidCap.xyz](https://vidcap.xyz) - Extract Youtube caption, download videos, capture screenshot, summarize,…
-- [ReadTube.me](https://readtube.me) - Write blog articles based on Youtube videos
-- [BoostTogether.com](https://boosttogether.com) - The Power of WE in Advertising
-- [AIVN.Site](https://aivn.site) - Face Swap, Remove BG, Photo Editor,…
-- [DxUp.dev](https://dxup.dev) - Developer-focused platform for app deployment & centralized cloud resource management.
+[![Star History Chart](https://api.star-history.com/svg?repos=partcad/prepare-commit-msg-cc-ai&type=Date)](https://star-history.com/#partcad/prepare-commit-msg-cc-ai&Date)

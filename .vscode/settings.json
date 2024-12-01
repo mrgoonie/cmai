@@ -1,0 +1,53 @@
+{
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "prettier.tabWidth": 2
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "codeium.enableConfig": {
+    "*": true,
+    "feature": true,
+    "log": true,
+    "markdown": true
+  },
+  "diffEditor.hideUnchangedRegions.enabled": true,
+  "editor.accessibilitySupport": "off",
+  "editor.autoIndent": "full",
+  "editor.detectIndentation": false,
+  "editor.fontFamily": "'Hack Nerd Font Mono'",
+  "editor.formatOnSave": true,
+  "editor.formatOnType": true,
+  "editor.insertSpaces": true,
+  "editor.rulers": [
+    120
+  ],
+  "editor.tabSize": 2,
+  "editor.useTabStops": false,
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+  "files.exclude": {
+    ".git/**": true
+  },
+  "files.trimFinalNewlines": true,
+  "git.autofetch": true,
+  "githubPullRequests.pullBranch": "never",
+  "prettier.printWidth": 120,
+  "prettier.proseWrap": "always",
+  "redhat.telemetry.enabled": false,
+  "remote.autoForwardPortsSource": "hybrid",
+  "search.exclude": {
+    ".git/**": true
+  },
+  "terminal.integrated.fontFamily": "'Hack Nerd Font Mono'",
+  "terminal.integrated.scrollback": 10000000,
+  "workbench.colorTheme": "GitHub Dark",
+  "cSpell.words": [
+    "behaviour",
+    "EDITMSG"
+  ],
+}

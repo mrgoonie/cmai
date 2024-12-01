@@ -1,24 +1,23 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-CONFIG_DIR="$HOME/.config/git-commit-ai"
-CONFIG_FILE="$CONFIG_DIR/config"
+set -euo pipefail
 
 # Debug mode flag
 DEBUG=false
-# Push flag
-PUSH=false
 # Model selection
 MODEL="google/gemini-flash-1.5-8b"
+# Commit message filename
+COMMIT_MSG_FILENAME=".git/COMMIT_EDITMSG"
+# Either send patch or only filenames
+OPEN_SOURCE=false
+# https://openrouter.ai/ API key
+OPENROUTER_API_KEY=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --debug)
             DEBUG=true
-            shift
-            ;;
-        --push|-p)
-            PUSH=true
             shift
             ;;
         --model)
@@ -31,9 +30,21 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --commit-msg-filename)
+            COMMIT_MSG_FILENAME="$2"
+            shift 2
+            ;;
+        --openrouter-api-key)
+            OPENROUTER_API_KEY="$2"
+            shift 2
+            ;;
+        --open-source)
+            OPEN_SOURCE=true
+            shift 1
+            ;;
         *)
-            API_KEY_ARG="$1"
-            shift
+            echo "Unknown option: $1"
+            exit 1
             ;;
     esac
 done
@@ -42,7 +53,7 @@ done
 debug_log() {
     if [ "$DEBUG" = true ]; then
         echo "DEBUG: $1"
-        if [ ! -z "$2" ]; then
+        if [ -n "$2" ]; then
             echo "DEBUG: Content >>>"
             echo "$2"
             echo "DEBUG: <<<"
@@ -50,55 +61,27 @@ debug_log() {
     fi
 }
 
-debug_log "Script started"
-debug_log "Config directory: $CONFIG_DIR"
-
-# Create config directory if it doesn't exist
-mkdir -p "$CONFIG_DIR"
-chmod 700 "$CONFIG_DIR"
-debug_log "Config directory created/checked"
-
-# Function to save API key
-save_api_key() {
-    echo "$1" > "$CONFIG_FILE"
-    chmod 600 "$CONFIG_FILE"
-    debug_log "API key saved to config file"
-}
-
-# Function to get API key
-get_api_key() {
-    if [ -f "$CONFIG_FILE" ]; then
-        cat "$CONFIG_FILE"
-    else
-        echo ""
-    fi
-}
-
-# Check if API key is provided as argument or exists in config
-if [ ! -z "$API_KEY_ARG" ]; then
-    debug_log "New API key provided as argument"
-    save_api_key "$API_KEY_ARG"
-fi
-
-API_KEY=$(get_api_key)
-debug_log "API key retrieved from config"
-
-if [ -z "$API_KEY" ]; then
-    echo "No API key found. Please provide the OpenRouter API key as an argument"
-    echo "Usage: ./git-commit.sh [--debug] [--push|-p] [--model <model_name>] <api_key>"
-    exit 1
-fi
-
-# Stage all changes
-debug_log "Staging all changes"
-git add .
+debug_log "MODEL=$MODEL"
+debug_log "COMMIT_MSG_FILENAME=${COMMIT_MSG_FILENAME}"
 
 # Get git changes
-CHANGES=$(git diff --cached --name-status)
+if [ "$OPEN_SOURCE" = true ]; then
+    CHANGES=$(git diff --cached | jq -Rsa .)
+else
+    CHANGES=$(git diff --cached --name-status | jq -Rsa .)
+fi
 debug_log "Git changes detected" "$CHANGES"
 
 if [ -z "$CHANGES" ]; then
-    echo "No staged changes found. Please stage your changes using 'git add' first."
+    echo "INFO: No staged changes found. Please stage your changes using 'git add' first."
+    exit 0
+fi
+
+debug_log "Script started"
+
+if [ -z "$OPENROUTER_API_KEY" ]; then
+    echo "ERROR: No API key found. Please provide the OpenRouter API key as an argument or set OPENROUTER_API_KEY environment variable."
+    echo "Usage: ./git-commit.sh [--debug] [--model <model_name>] [--commit-msg-filename <filename>] [--openrouter-api-key <key>]"
     exit 1
 fi
 
@@ -156,27 +139,7 @@ if [ -z "$COMMIT_FULL" ]; then
     exit 1
 fi
 
-# Execute git commit
-debug_log "Executing git commit"
-git commit -m "$COMMIT_FULL"
+debug_log "$COMMIT_FULL"
 
-if [ $? -ne 0 ]; then
-    echo "Failed to commit changes"
-    exit 1
-fi
-
-# Push to origin if flag is set
-if [ "$PUSH" = true ]; then
-    debug_log "Pushing to origin"
-    git push origin
-
-    if [ $? -ne 0 ]; then
-        echo "Failed to push changes"
-        exit 1
-    fi
-    echo "Successfully pushed changes to origin"
-fi
-
-echo "Successfully committed and pushed changes with message:"
-echo "$COMMIT_FULL"
-debug_log "Script completed successfully" 
+# Write the commit message to .git/COMMIT_EDITMSG
+echo "$COMMIT_FULL" > "$COMMIT_MSG_FILENAME"

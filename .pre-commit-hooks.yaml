@@ -1,0 +1,8 @@
+# https://pre-commit.com/#creating-new-hooks
+- id: prepare-commit-msg-cc-ai
+  name: Git Commit AI
+  description: A hook to assist with git commit messages using AI.
+  entry: bash prepare-commit-msg.sh
+  args: ["--commit-msg-filename"]
+  language: system
+  stages: [prepare-commit-msg]
