@@ -13,28 +13,28 @@ MODEL="google/gemini-flash-1.5-8b"
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --debug)
-            DEBUG=true
-            shift
-            ;;
-        --push|-p)
-            PUSH=true
-            shift
-            ;;
-        --model)
-            # Check if next argument exists and doesn't start with -
-            if [[ -n "$2" && "$2" != -* ]]; then
-                MODEL="$2"
-                shift 2
-            else
-                echo "Error: --model requires a valid model name"
-                exit 1
-            fi
-            ;;
-        *)
-            API_KEY_ARG="$1"
-            shift
-            ;;
+    --debug)
+        DEBUG=true
+        shift
+        ;;
+    --push | -p)
+        PUSH=true
+        shift
+        ;;
+    --model)
+        # Check if next argument exists and doesn't start with -
+        if [[ -n "$2" && "$2" != -* ]]; then
+            MODEL="$2"
+            shift 2
+        else
+            echo "Error: --model requires a valid model name"
+            exit 1
+        fi
+        ;;
+    *)
+        API_KEY_ARG="$1"
+        shift
+        ;;
     esac
 done
 
@@ -60,7 +60,7 @@ debug_log "Config directory created/checked"
 
 # Function to save API key
 save_api_key() {
-    echo "$1" > "$CONFIG_FILE"
+    echo "$1" >"$CONFIG_FILE"
     chmod 600 "$CONFIG_FILE"
     debug_log "API key saved to config file"
 }
@@ -103,7 +103,8 @@ if [ -z "$CHANGES" ]; then
 fi
 
 # Prepare the request body
-REQUEST_BODY=$(cat <<EOF
+REQUEST_BODY=$(
+    cat <<EOF
 {
   "stream": false,
   "model": "$MODEL",
@@ -114,7 +115,7 @@ REQUEST_BODY=$(cat <<EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message in conventional commit standard format based on the following file changes:\n\`\`\`\n${CHANGES}\n\`\`\`\n- Commit message title must be a concise summary (max 100 characters)\n- IMPORTANT: Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
+      "content": "Generate a commit message in conventional commit standard format based on the following file changes:\n\`\`\`\n${CHANGES}\n\`\`\`\n- Commit message title must be a concise summary (max 100 characters)\n- If it's just a minor change, use 'fix' in the title\n- IMPORTANT: Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
     }
   ]
 }
@@ -142,10 +143,10 @@ fi
 # Clean the message:
 # 1. Preserve the structure of the commit message
 # 2. Clean up escape sequences
-COMMIT_FULL=$(echo "$COMMIT_FULL" | \
-    sed 's/\\n/\n/g' | \
-    sed 's/\\r//g' | \
-    sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | \
+COMMIT_FULL=$(echo "$COMMIT_FULL" |
+    sed 's/\\n/\n/g' |
+    sed 's/\\r//g' |
+    sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
     sed 's/\\[[:alpha:]]//g')
 
 debug_log "Extracted commit message" "$COMMIT_FULL"
@@ -179,4 +180,4 @@ fi
 
 echo "Successfully committed and pushed changes with message:"
 echo "$COMMIT_FULL"
-debug_log "Script completed successfully" 
+debug_log "Script completed successfully"
