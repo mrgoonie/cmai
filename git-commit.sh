@@ -111,11 +111,11 @@ REQUEST_BODY=$(
   "messages": [
     {
       "role": "system",
-      "content": "Provide a detailed commit message with a title and description. The title should be a concise summary (max 50 characters). The description should provide more context about the changes, explaining why the changes were made and their impact. Use bullet points if multiple changes are significant. If it's just a minor change, use 'fix' in the title. Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
+      "content": "Provide a detailed commit message with a title and description. The title should be a concise summary (max 50 characters). The description should provide more context about the changes, explaining why the changes were made and their impact. Use bullet points if multiple changes are significant. If it's just some minor changes, use 'fix' instead of 'feat'. Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
     },
     {
       "role": "user",
-      "content": "Generate a commit message in conventional commit standard format based on the following file changes:\n\`\`\`\n${CHANGES}\n\`\`\`\n- Commit message title must be a concise summary (max 100 characters)\n- If it's just a minor change, use 'fix' in the title\n- IMPORTANT: Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
+      "content": "Generate a commit message in conventional commit standard format based on the following file changes:\n\`\`\`\n${CHANGES}\n\`\`\`\n- Commit message title must be a concise summary (max 100 characters)\n- If it's just some minor changes, use 'fix' instead of 'feat'\n- IMPORTANT: Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
     }
   ]
 }
