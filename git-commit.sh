@@ -194,8 +194,8 @@ if [ "$USE_OLLAMA" = true ]; then
     debug_log "Making API request to Ollama"
     ENDPOINT="chat"
     HEADERS=()
-    # Simpler prompt for Ollama
-    REQUEST_BODY='{"model":"'"$MODEL"'","messages":[{"role":"system","content":"You are a git commit message generator. Create conventional commit messages."},{"role":"user","content":"Generate a commit message for these changes: '"$CHANGES_INLINE"'"}]}'
+    # Simpler prompt for Ollama with stream:false
+    REQUEST_BODY='{"model":"'"$MODEL"'","stream":false,"messages":[{"role":"system","content":"You are a git commit message generator. Create conventional commit messages."},{"role":"user","content":"Generate a commit message for these changes: '"$CHANGES_INLINE"'"}]}'
     if [ ! -z "$API_KEY" ]; then
         HEADERS+=(-H "Authorization: Bearer ${API_KEY}")
     fi
@@ -214,12 +214,17 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/$ENDPOINT" \
 debug_log "API response received" "$RESPONSE"
 
 # Extract and clean the commit message
-# First, try to parse the response as JSON and extract the content
-COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-
-# If jq fails or returns null, fallback to grep method
-if [ -z "$COMMIT_FULL" ] || [ "$COMMIT_FULL" = "null" ]; then
-    COMMIT_FULL=$(echo "$RESPONSE" | grep -o '"content":"[^"]*"' | cut -d'"' -f4)
+if [ "$USE_OLLAMA" = true ]; then
+    # For Ollama, extract content from non-streaming response
+    COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.message.content')
+else
+    # For OpenRouter
+    COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+    
+    # If jq fails or returns null, fallback to grep method
+    if [ -z "$COMMIT_FULL" ] || [ "$COMMIT_FULL" = "null" ]; then
+        COMMIT_FULL=$(echo "$RESPONSE" | grep -o '"content":"[^"]*"' | cut -d'"' -f4)
+    fi
 fi
 
 # Clean the message:
