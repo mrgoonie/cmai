@@ -201,13 +201,13 @@ Options:
 ### OpenRouter (Default)
 ```bash
 # First time setup with API key
-cmai your_openrouter_api_key
+cmai <your_openrouter_api_key>
 
 # Normal usage
 cmai
 
 # Use a different OpenRouter model
-cmai --model claude-3-opus-20240229
+cmai --model "google/gemini-flash-1.5-8b"
 
 # Debug mode with push
 cmai --debug --push

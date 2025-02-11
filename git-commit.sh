@@ -18,6 +18,10 @@ PROVIDER_CUSTOM="custom"
 OPENROUTER_URL="https://openrouter.ai/api/v1"
 OLLAMA_URL="http://localhost:11434/api"
 
+# Default models for providers
+OLLAMA_MODEL="codellama"
+OPENROUTER_MODEL="google/gemini-flash-1.5-8b"
+
 # Debug function
 debug_log() {
     if [ "$DEBUG" = true ]; then
@@ -32,7 +36,10 @@ debug_log() {
 
 # Function to save API key
 save_api_key() {
-    echo "$1" >"$CONFIG_FILE"
+    mkdir -p "$CONFIG_DIR"
+    # Remove any quotes or extra arguments from the API key
+    API_KEY=$(echo "$1" | cut -d' ' -f1)
+    echo "$API_KEY" >"$CONFIG_FILE"
     chmod 600 "$CONFIG_FILE"
     debug_log "API key saved to config file"
 }
@@ -58,7 +65,7 @@ get_model() {
     if [ -f "$MODEL_FILE" ]; then
         cat "$MODEL_FILE"
     else
-        echo "google/gemini-flash-1.5-8b"  # Default model
+        echo "" # Return empty string to let provider-specific default be used
     fi
 }
 
@@ -90,8 +97,14 @@ get_base_url() {
     if [ -f "$BASE_URL_FILE" ]; then
         cat "$BASE_URL_FILE"
     else
-        echo "$OPENROUTER_URL"  # Default base URL
+        echo "$OPENROUTER_URL" # Default base URL
     fi
+}
+
+# Replace all linebreaks with proper JSON escaping
+function replace_linebreaks() {
+    local input="$1"
+    printf '%s' "$input" | tr '\n' '\\n' | sed 's/\n$//'
 }
 
 # Load saved provider and base URL or use defaults
@@ -106,9 +119,20 @@ fi
 
 # Default models for providers
 OLLAMA_MODEL="codellama"
+OPENROUTER_MODEL="google/gemini-flash-1.5-8b"
 
-# Get saved model or use default
+# Get saved model or use default based on provider
 MODEL=$(get_model)
+if [ -z "$MODEL" ]; then
+    case "$PROVIDER" in
+    "$PROVIDER_OLLAMA")
+        MODEL="$OLLAMA_MODEL"
+        ;;
+    "$PROVIDER_OPENROUTER")
+        MODEL="$OPENROUTER_MODEL"
+        ;;
+    esac
+fi
 
 # Get saved base URL or use default
 BASE_URL=$(get_base_url)
@@ -131,15 +155,19 @@ while [[ $# -gt 0 ]]; do
     --use-ollama)
         PROVIDER="$PROVIDER_OLLAMA"
         BASE_URL="$OLLAMA_URL"
+        MODEL="$OLLAMA_MODEL"
         save_provider "$PROVIDER"
         save_base_url "$BASE_URL"
+        save_model "$MODEL"
         shift
         ;;
     --use-openrouter)
         PROVIDER="$PROVIDER_OPENROUTER"
         BASE_URL="$OPENROUTER_URL"
+        MODEL="$OPENROUTER_MODEL"
         save_provider "$PROVIDER"
         save_base_url "$BASE_URL"
+        save_model "$MODEL"
         shift
         ;;
     --use-custom)
@@ -170,7 +198,7 @@ while [[ $# -gt 0 ]]; do
         echo "  -h, --help            Show this help message"
         echo ""
         echo "Examples:"
-        echo "  cmai your_api_key                    # First time setup with API key"
+        echo "  cmai --api-key your_api_key          # First time setup with API key"
         echo "  cmai --use-ollama                    # Switch to Ollama provider"
         echo "  cmai --use-openrouter                # Switch back to OpenRouter"
         echo "  cmai --use-custom http://my-api.com  # Use custom provider"
@@ -179,7 +207,8 @@ while [[ $# -gt 0 ]]; do
     --model)
         # Check if next argument exists and doesn't start with -
         if [[ -n "$2" && "$2" != -* ]]; then
-            MODEL="$2"
+            # Remove any quotes from model name and save it
+            MODEL=$(echo "$2" | tr -d '"')
             save_model "$MODEL"
             debug_log "New model saved: $MODEL"
             shift 2
@@ -200,25 +229,31 @@ while [[ $# -gt 0 ]]; do
             exit 1
         fi
         ;;
+    --api-key)
+        # Check if next argument exists and doesn't start with -
+        if [[ -n "$2" && "$2" != -* ]]; then
+            save_api_key "$2"
+            debug_log "New API key saved"
+            shift 2
+        else
+            echo "Error: --api-key requires a valid API key"
+            exit 1
+        fi
+        ;;
     *)
-        API_KEY_ARG="$1"
-        shift
+        echo "Error: Unknown argument $1"
+        exit 1
         ;;
     esac
 done
 
-# Check if API key is provided as argument or exists in config
-if [ ! -z "$API_KEY_ARG" ]; then
-    debug_log "New API key provided as argument"
-    save_api_key "$API_KEY_ARG"
-fi
-
+# Get API key from config
 API_KEY=$(get_api_key)
 debug_log "API key retrieved from config"
 
 if [ -z "$API_KEY" ] && [ "$PROVIDER" = "$PROVIDER_OPENROUTER" ]; then
-    echo "No API key found. Please provide the OpenRouter API key as an argument"
-    echo "Usage: cmai [--debug] [--push|-p] [--use-ollama] [--model <model_name>] [--base-url <url>] <api_key>"
+    echo "No API key found. Please provide the OpenRouter API key using --api-key flag"
+    echo "Usage: cmai [--debug] [--push|-p] [--use-ollama] [--model <model_name>] [--base-url <url>] [--api-key <key>]"
     exit 1
 fi
 
@@ -259,48 +294,24 @@ if [ -z "$CHANGES" ]; then
     exit 1
 fi
 
-# Prepare the request body based on provider
-if [ "$PROVIDER" = "$PROVIDER_OLLAMA" ]; then
-    # For Ollama, prepare a simpler JSON without escapes
-    REQUEST_BODY=$(
-        cat <<EOF
-{
-  "model": "$MODEL",
-  "messages": [
-    {
-      "role": "system",
-      "content": "Provide a detailed commit message with a title and description. The title should be a concise summary (max 50 characters). The description should provide more context about the changes, explaining why the changes were made and their impact. Use bullet points if multiple changes are significant. If it's just some minor changes, use 'fix' instead of 'feat'. Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
-    },
-    {
-      "role": "user",
-      "content": "Generate a commit message in conventional commit standard format based on the following file changes: $CHANGES. Commit message title must be a concise summary (max 100 characters). If it's just some minor changes, use 'fix' instead of 'feat'. Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
-    }
-  ]
-}
-EOF
-    )
-else
-    # For OpenRouter and custom providers
-    REQUEST_BODY=$(
-        cat <<EOF
-{
-  "stream": false,
-  "model": "$MODEL",
-  "messages": [
-    {
-      "role": "system",
-      "content": "Provide a detailed commit message with a title and description. The title should be a concise summary (max 50 characters). The description should provide more context about the changes, explaining why the changes were made and their impact. Use bullet points if multiple changes are significant. If it's just some minor changes, use 'fix' instead of 'feat'. Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
-    },
-    {
-      "role": "user",
-      "content": "Generate a commit message in conventional commit standard format based on the following file changes:\\n\`\`\`\\n${CHANGES}\\n\`\`\`\\n- Commit message title must be a concise summary (max 100 characters)\\n- If it's just some minor changes, use 'fix' instead of 'feat'\\n- IMPORTANT: Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
-    }
-  ]
-}
-EOF
-    )
+# Remove all linebreaks from CHANGES
+CHANGES=$(replace_linebreaks "$CHANGES")
+
+# Set model based on provider if not explicitly specified
+if [ -z "$MODEL" ]; then
+    case "$PROVIDER" in
+    "$PROVIDER_OLLAMA")
+        MODEL="$OLLAMA_MODEL"
+        ;;
+    "$PROVIDER_OPENROUTER")
+        MODEL="$OPENROUTER_MODEL"
+        ;;
+    esac
 fi
-debug_log "Request body prepared with model: $MODEL" "$REQUEST_BODY"
+
+# Format changes into a single line
+FORMATTED_CHANGES=$(echo "$CHANGES" | tr '\n' ' ' | sed 's/  */ /g')
+FORMATTED_DIFF=$(echo "$DIFF_CONTENT" | tr '\n' '\\n' | sed 's/"/\\"/g')
 
 # Make the API request
 case "$PROVIDER" in
@@ -309,27 +320,30 @@ case "$PROVIDER" in
     ENDPOINT="api/generate"
     HEADERS=(-H "Content-Type: application/json")
     BASE_URL="http://localhost:11434"
-    # Format changes into a single line
-    FORMATTED_CHANGES=$(echo "$CHANGES" | tr '\n' ' ' | sed 's/  */ /g')
-    FORMATTED_DIFF=$(echo "$DIFF_CONTENT" | tr '\n' '\\n' | sed 's/"/\\"/g')
-    REQUEST_BODY=$(cat <<EOF
+    REQUEST_BODY=$(
+        cat <<EOF
 {
   "model": "$MODEL",
   "prompt": "Generate a conventional commit message for these changes: $FORMATTED_CHANGES. Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: 50-70 chars, imperative mood, no period\n- Body: explain what and why\n- Use fix for minor changes",
   "stream": false
 }
 EOF
-)
+    )
     ;;
 "$PROVIDER_OPENROUTER")
     debug_log "Making API request to OpenRouter"
     ENDPOINT="chat/completions"
-    HEADERS=(-H "Authorization: Bearer ${API_KEY}")
+    HEADERS=(
+        "HTTP-Referer: https://github.com/mrgoonie/cmai"
+        "Authorization: Bearer $API_KEY"
+        "Content-Type: application/json"
+        "X-Title: cmai - AI Commit Message Generator"
+    )
     REQUEST_BODY=$(
         cat <<EOF
 {
-  "stream": false,
   "model": "$MODEL",
+  "stream": false,
   "messages": [
     {
       "role": "system",
@@ -369,9 +383,21 @@ EOF
     ;;
 esac
 
+# Debug
+debug_log "Using provider: $PROVIDER"
+debug_log "Provider endpoint: $ENDPOINT"
+debug_log "Request headers: ${HEADERS}"
+debug_log "Request model: ${MODEL}"
+debug_log "Request body: $REQUEST_BODY"
+
+# Convert headers array to proper curl format
+CURL_HEADERS=()
+for header in "${HEADERS[@]}"; do
+    CURL_HEADERS+=(-H "$header")
+done
+
 RESPONSE=$(curl -s -X POST "$BASE_URL/$ENDPOINT" \
-    "${HEADERS[@]}" \
-    -H "Content-Type: application/json" \
+    "${CURL_HEADERS[@]}" \
     -d "$REQUEST_BODY")
 debug_log "API response received" "$RESPONSE"
 
@@ -398,7 +424,7 @@ case "$PROVIDER" in
 "$PROVIDER_OPENROUTER" | "$PROVIDER_CUSTOM")
     # For OpenRouter and custom providers
     COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-    
+
     # If jq fails or returns null, fallback to grep method
     if [ -z "$COMMIT_FULL" ] || [ "$COMMIT_FULL" = "null" ]; then
         COMMIT_FULL=$(echo "$RESPONSE" | grep -o '"content":"[^"]*"' | cut -d'"' -f4)
