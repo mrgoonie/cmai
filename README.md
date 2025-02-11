@@ -148,8 +148,11 @@ cmai --debug --push
 # Use a different AI model
 cmai --model qwen/qwen-2.5-coder-32b-instruct
 
+# Use a different API endpoint
+cmai --base-url https://api.example.com/v1
+
 # Combine multiple flags
-cmai --debug --push --model qwen/qwen-2.5-coder-32b-instruct
+cmai --debug --push --model qwen/qwen-2.5-coder-32b-instruct --base-url https://api.example.com/v1
 ```
 
 Example generated commit messages:
@@ -168,11 +171,13 @@ Example generated commit messages:
 │ └── git-commit.sh
 ├── .config/
 │ └── git-commit-ai/
-│ └── config
+│   ├── config
+│   ├── model
+│   └── base_url
 └── usr/
-└── local/
-└── bin/
-└── cmai -> ~/git-commit-ai/git-commit.sh
+  └── local/
+    └── bin/
+      └── cmai -> ~/git-commit-ai/git-commit.sh
 ```
 
 ### Windows
@@ -182,8 +187,10 @@ Example generated commit messages:
 ├── git-commit-ai/
 │ └── cmai.sh
 └── .config/
-└── git-commit-ai/
-└── config
+  └── git-commit-ai/
+    ├── config
+    ├── model
+    └── base_url
 ```
 
 ## Security

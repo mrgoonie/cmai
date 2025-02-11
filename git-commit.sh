@@ -3,11 +3,14 @@
 CONFIG_DIR="$HOME/.config/git-commit-ai"
 CONFIG_FILE="$CONFIG_DIR/config"
 MODEL_FILE="$CONFIG_DIR/model"
+BASE_URL_FILE="$CONFIG_DIR/base_url"
 
 # Debug mode flag
 DEBUG=false
 # Push flag
 PUSH=false
+# Default base URL
+BASE_URL="https://openrouter.ai/api/v1"
 
 # Debug function
 debug_log() {
@@ -53,8 +56,27 @@ get_model() {
     fi
 }
 
+# Function to save base URL
+save_base_url() {
+    echo "$1" >"$BASE_URL_FILE"
+    chmod 600 "$BASE_URL_FILE"
+    debug_log "Base URL saved to config file"
+}
+
+# Function to get base URL
+get_base_url() {
+    if [ -f "$BASE_URL_FILE" ]; then
+        cat "$BASE_URL_FILE"
+    else
+        echo "https://openrouter.ai/api/v1"  # Default base URL
+    fi
+}
+
 # Get saved model or use default
 MODEL=$(get_model)
+
+# Get saved base URL or use default
+BASE_URL=$(get_base_url)
 
 debug_log "Script started"
 debug_log "Config directory: $CONFIG_DIR"
@@ -87,6 +109,18 @@ while [[ $# -gt 0 ]]; do
             exit 1
         fi
         ;;
+    --base-url)
+        # Check if next argument exists and doesn't start with -
+        if [[ -n "$2" && "$2" != -* ]]; then
+            BASE_URL="$2"
+            save_base_url "$BASE_URL"
+            debug_log "New base URL saved: $BASE_URL"
+            shift 2
+        else
+            echo "Error: --base-url requires a valid URL"
+            exit 1
+        fi
+        ;;
     *)
         API_KEY_ARG="$1"
         shift
@@ -105,7 +139,7 @@ debug_log "API key retrieved from config"
 
 if [ -z "$API_KEY" ]; then
     echo "No API key found. Please provide the OpenRouter API key as an argument"
-    echo "Usage: cmai [--debug] [--push|-p] [--model <model_name>] <api_key>"
+    echo "Usage: cmai [--debug] [--push|-p] [--model <model_name>] [--base-url <url>] <api_key>"
     exit 1
 fi
 
@@ -145,7 +179,7 @@ debug_log "Request body prepared with model: $MODEL" "$REQUEST_BODY"
 
 # Make the API request
 debug_log "Making API request to OpenRouter"
-RESPONSE=$(curl -s -X POST "https://openrouter.ai/api/v1/chat/completions" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/chat/completions" \
     -H "Authorization: Bearer ${API_KEY}" \
     -H "Content-Type: application/json" \
     -d "$REQUEST_BODY")
