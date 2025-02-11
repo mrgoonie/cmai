@@ -324,7 +324,7 @@ case "$PROVIDER" in
         cat <<EOF
 {
   "model": "$MODEL",
-  "prompt": "Generate a conventional commit message for these changes: $FORMATTED_CHANGES. Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: 50-70 chars, imperative mood, no period\n- Body: explain what and why\n- Use fix for minor changes",
+  "prompt": "Generate a conventional commit message for these changes: $FORMATTED_CHANGES. Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: 50-70 chars, imperative mood, no period\n- Body: explain what and why\n- Use fix for minor changes\n- Response should be the commit message only, no explanations.",
   "stream": false
 }
 EOF
