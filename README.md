@@ -9,12 +9,12 @@ Your commit messages will look like this:
 ## Features
 
 - 🤖 AI-powered commit message generation with multiple options:
-  - OpenRouter (default) using `google/gemini-flash-1.5-8b` - SUPER CHEAP!
-    - Around $0.00001/commit -> $1 per 100K commit messages!
   - Local [Ollama](https://ollama.ai/) support - Completely FREE and private!
     - No API key required
     - Works offline
     - Supports various models (codellama, llama2, etc.)
+  - OpenRouter (default) using `google/gemini-flash-1.5-8b` - SUPER CHEAP!
+    - Around $0.00001/commit -> $1 per 100K commit messages!
   - Custom API support - Bring your own provider!
 - 📝 Follows [Conventional Commits](https://www.conventionalcommits.org/) format
 - 🔒 Secure local API key storage
