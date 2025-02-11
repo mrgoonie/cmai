@@ -9,8 +9,13 @@ BASE_URL_FILE="$CONFIG_DIR/base_url"
 DEBUG=false
 # Push flag
 PUSH=false
-# Default base URL
-BASE_URL="https://openrouter.ai/api/v1"
+# Use Ollama flag
+USE_OLLAMA=false
+# Default base URLs
+OPENROUTER_URL="https://openrouter.ai/api/v1"
+OLLAMA_URL="http://localhost:11434/api"
+# Default base URL (OpenRouter)
+BASE_URL="$OPENROUTER_URL"
 
 # Debug function
 debug_log() {
@@ -68,7 +73,7 @@ get_base_url() {
     if [ -f "$BASE_URL_FILE" ]; then
         cat "$BASE_URL_FILE"
     else
-        echo "https://openrouter.ai/api/v1"  # Default base URL
+        echo "$OPENROUTER_URL"  # Default base URL
     fi
 }
 
@@ -95,6 +100,11 @@ while [[ $# -gt 0 ]]; do
         ;;
     --push | -p)
         PUSH=true
+        shift
+        ;;
+    --use-ollama)
+        USE_OLLAMA=true
+        BASE_URL="$OLLAMA_URL"
         shift
         ;;
     --model)
@@ -137,9 +147,9 @@ fi
 API_KEY=$(get_api_key)
 debug_log "API key retrieved from config"
 
-if [ -z "$API_KEY" ]; then
+if [ -z "$API_KEY" ] && [ "$USE_OLLAMA" = false ]; then
     echo "No API key found. Please provide the OpenRouter API key as an argument"
-    echo "Usage: cmai [--debug] [--push|-p] [--model <model_name>] [--base-url <url>] <api_key>"
+    echo "Usage: cmai [--debug] [--push|-p] [--use-ollama] [--model <model_name>] [--base-url <url>] <api_key>"
     exit 1
 fi
 
@@ -147,8 +157,10 @@ fi
 debug_log "Staging all changes"
 git add .
 
-# Get git changes
-CHANGES=$(git diff --cached --name-status)
+# Get git changes and clean up any tabs
+CHANGES=$(git diff --cached --name-status | tr '\t' ' ' | sed 's/  */ /g')
+# Convert newlines to spaces for Ollama
+CHANGES_INLINE=$(echo "$CHANGES" | tr '\n' ' ')
 debug_log "Git changes detected" "$CHANGES"
 
 if [ -z "$CHANGES" ]; then
@@ -178,9 +190,25 @@ EOF
 debug_log "Request body prepared with model: $MODEL" "$REQUEST_BODY"
 
 # Make the API request
-debug_log "Making API request to OpenRouter"
-RESPONSE=$(curl -s -X POST "$BASE_URL/chat/completions" \
-    -H "Authorization: Bearer ${API_KEY}" \
+if [ "$USE_OLLAMA" = true ]; then
+    debug_log "Making API request to Ollama"
+    ENDPOINT="chat"
+    HEADERS=()
+    # Simpler prompt for Ollama
+    REQUEST_BODY='{"model":"'"$MODEL"'","messages":[{"role":"system","content":"You are a git commit message generator. Create conventional commit messages."},{"role":"user","content":"Generate a commit message for these changes: '"$CHANGES_INLINE"'"}]}'
+    if [ ! -z "$API_KEY" ]; then
+        HEADERS+=(-H "Authorization: Bearer ${API_KEY}")
+    fi
+else
+    debug_log "Making API request to OpenRouter"
+    ENDPOINT="chat/completions"
+    HEADERS=(-H "Authorization: Bearer ${API_KEY}")
+    # Full featured prompt for OpenRouter
+    REQUEST_BODY='{"stream":false,"model":"'"$MODEL"'","messages":[{"role":"system","content":"You are a git commit message generator. Create conventional commit messages."},{"role":"user","content":"Generate a commit message for these changes: '"$CHANGES_INLINE"'"}]}'
+fi
+
+RESPONSE=$(curl -s -X POST "$BASE_URL/$ENDPOINT" \
+    "${HEADERS[@]}" \
     -H "Content-Type: application/json" \
     -d "$REQUEST_BODY")
 debug_log "API response received" "$RESPONSE"
