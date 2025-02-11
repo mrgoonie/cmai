@@ -98,7 +98,7 @@ The API key will be securely stored in:
 1. Install Ollama from https://ollama.ai/
 2. Pull your preferred model (e.g., codellama):
 ```bash
-ollama pull codellama
+ollama pull deepseek-r1:7b
 ```
 3. Make sure Ollama is running in the background
 
@@ -150,15 +150,15 @@ List of available models: https://openrouter.ai/models
 When using Ollama, first pull your desired model:
 ```bash
 # Pull the model
-ollama pull codellama
+ollama pull deepseek-r1:7b
 
 # Use the model
-cmai --model codellama
+cmai --model deepseek-r1:7b
 ```
 List of available models: https://ollama.ai/library
 
 Popular models for commit messages:
-- `codellama` - Optimized for code understanding
+- `deepseek-r1` - Optimized for code understanding
 - `llama2` - Good all-around performance
 - `mistral` - Fast and efficient
 
@@ -218,8 +218,8 @@ cmai --debug --push
 # Switch to Ollama provider
 cmai --use-ollama
 
-# Use a specific Ollama model
-cmai --model codellama
+# Use a specific deepseek-r1 model
+cmai --model deepseek-r1:7b
 
 # Debug mode with Ollama
 cmai --debug --use-ollama
@@ -234,8 +234,8 @@ cmai --use-custom http://my-api.com
 cmai --use-custom http://my-api.com --model my-custom-model
 ```
 
-# Use a different Ollama model
-cmai --use-ollama --model codellama
+# Use a different model
+cmai --use-ollama --model qwen-coder:7b
 
 # Use Ollama with debug and push
 cmai --use-ollama --debug --push
