@@ -8,6 +8,35 @@ MODEL_FILE="$CONFIG_DIR/model"
 DEBUG=false
 # Push flag
 PUSH=false
+
+# Debug function
+debug_log() {
+    if [ "$DEBUG" = true ]; then
+        echo "DEBUG: $1"
+        if [ ! -z "$2" ]; then
+            echo "DEBUG: Content >>>"
+            echo "$2"
+            echo "DEBUG: <<<"
+        fi
+    fi
+}
+
+# Function to save API key
+save_api_key() {
+    echo "$1" >"$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
+    debug_log "API key saved to config file"
+}
+
+# Function to get API key
+get_api_key() {
+    if [ -f "$CONFIG_FILE" ]; then
+        cat "$CONFIG_FILE"
+    else
+        echo ""
+    fi
+}
+
 # Function to save model
 save_model() {
     echo "$1" >"$MODEL_FILE"
@@ -26,6 +55,14 @@ get_model() {
 
 # Get saved model or use default
 MODEL=$(get_model)
+
+debug_log "Script started"
+debug_log "Config directory: $CONFIG_DIR"
+
+# Create config directory if it doesn't exist
+mkdir -p "$CONFIG_DIR"
+chmod 700 "$CONFIG_DIR"
+debug_log "Config directory created/checked"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -57,42 +94,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Debug function
-debug_log() {
-    if [ "$DEBUG" = true ]; then
-        echo "DEBUG: $1"
-        if [ ! -z "$2" ]; then
-            echo "DEBUG: Content >>>"
-            echo "$2"
-            echo "DEBUG: <<<"
-        fi
-    fi
-}
-
-debug_log "Script started"
-debug_log "Config directory: $CONFIG_DIR"
-
-# Create config directory if it doesn't exist
-mkdir -p "$CONFIG_DIR"
-chmod 700 "$CONFIG_DIR"
-debug_log "Config directory created/checked"
-
-# Function to save API key
-save_api_key() {
-    echo "$1" >"$CONFIG_FILE"
-    chmod 600 "$CONFIG_FILE"
-    debug_log "API key saved to config file"
-}
-
-# Function to get API key
-get_api_key() {
-    if [ -f "$CONFIG_FILE" ]; then
-        cat "$CONFIG_FILE"
-    else
-        echo ""
-    fi
-}
-
 # Check if API key is provided as argument or exists in config
 if [ ! -z "$API_KEY_ARG" ]; then
     debug_log "New API key provided as argument"
@@ -104,7 +105,7 @@ debug_log "API key retrieved from config"
 
 if [ -z "$API_KEY" ]; then
     echo "No API key found. Please provide the OpenRouter API key as an argument"
-    echo "Usage: ./git-commit.sh [--debug] [--push|-p] [--model <model_name>] <api_key>"
+    echo "Usage: cmai [--debug] [--push|-p] [--model <model_name>] <api_key>"
     exit 1
 fi
 
@@ -134,7 +135,7 @@ REQUEST_BODY=$(
     },
     {
       "role": "user",
-      "content": "Generate a commit message in conventional commit standard format based on the following file changes:\n\`\`\`\n${CHANGES}\n\`\`\`\n- Commit message title must be a concise summary (max 100 characters)\n- If it's just some minor changes, use 'fix' instead of 'feat'\n- IMPORTANT: Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
+      "content": "Generate a commit message in conventional commit standard format based on the following file changes:\\n\`\`\`\\n${CHANGES}\\n\`\`\`\\n- Commit message title must be a concise summary (max 100 characters)\\n- If it's just some minor changes, use 'fix' instead of 'feat'\\n- IMPORTANT: Do not include any explanation in your response, only return a commit message content, do not wrap it in backticks"
     }
   ]
 }
