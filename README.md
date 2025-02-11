@@ -8,10 +8,14 @@ Your commit messages will look like this:
 
 ## Features
 
-- 🤖 AI-powered commit message generation with two options:
-  - Local [Ollama](https://ollama.ai/) support - Completely FREE and private!
+- 🤖 AI-powered commit message generation with multiple options:
   - OpenRouter (default) using `google/gemini-flash-1.5-8b` - SUPER CHEAP!
     - Around $0.00001/commit -> $1 per 100K commit messages!
+  - Local [Ollama](https://ollama.ai/) support - Completely FREE and private!
+    - No API key required
+    - Works offline
+    - Supports various models (codellama, llama2, etc.)
+  - Custom API support - Bring your own provider!
 - 📝 Follows [Conventional Commits](https://www.conventionalcommits.org/) format
 - 🔒 Secure local API key storage
 - 🚀 Automatic git commit and push
@@ -116,12 +120,47 @@ cmai --push
 cmai -p
 ```
 
-To use a different AI model:
+### AI Provider Options
+
+By default, CMAI uses OpenRouter with the `google/gemini-flash-1.5-8b` model. You can switch between different providers:
+
+```bash
+# Use Ollama (local)
+cmai --use-ollama
+
+# Switch back to OpenRouter
+cmai --use-openrouter
+
+# Use a custom provider
+cmai --use-custom http://your-api-endpoint
+```
+
+The provider choice is saved for future use, so you only need to specify it once.
+
+### Model Selection
+
+#### OpenRouter Models
+When using OpenRouter, you can choose from their available models:
 ```bash
 cmai --model qwen/qwen-2.5-coder-32b-instruct
 ```
-
 List of available models: https://openrouter.ai/models
+
+#### Ollama Models
+When using Ollama, first pull your desired model:
+```bash
+# Pull the model
+ollama pull codellama
+
+# Use the model
+cmai --model codellama
+```
+List of available models: https://ollama.ai/library
+
+Popular models for commit messages:
+- `codellama` - Optimized for code understanding
+- `llama2` - Good all-around performance
+- `mistral` - Fast and efficient
 
 This will:
 - Stage all changes
