@@ -2,13 +2,30 @@
 
 CONFIG_DIR="$HOME/.config/git-commit-ai"
 CONFIG_FILE="$CONFIG_DIR/config"
+MODEL_FILE="$CONFIG_DIR/model"
 
 # Debug mode flag
 DEBUG=false
 # Push flag
 PUSH=false
-# Model selection
-MODEL="google/gemini-flash-1.5-8b"
+# Function to save model
+save_model() {
+    echo "$1" >"$MODEL_FILE"
+    chmod 600 "$MODEL_FILE"
+    debug_log "Model saved to config file"
+}
+
+# Function to get model
+get_model() {
+    if [ -f "$MODEL_FILE" ]; then
+        cat "$MODEL_FILE"
+    else
+        echo "google/gemini-flash-1.5-8b"  # Default model
+    fi
+}
+
+# Get saved model or use default
+MODEL=$(get_model)
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -25,6 +42,8 @@ while [[ $# -gt 0 ]]; do
         # Check if next argument exists and doesn't start with -
         if [[ -n "$2" && "$2" != -* ]]; then
             MODEL="$2"
+            save_model "$MODEL"
+            debug_log "New model saved: $MODEL"
             shift 2
         else
             echo "Error: --model requires a valid model name"
