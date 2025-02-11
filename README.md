@@ -8,8 +8,14 @@ Your commit messages will look like this:
 
 ## Features
 
-- 🤖 AI-powered commit message generation (using `google/gemini-flash-1.5-8b` - SUPER CHEAP!)
-  - Around $0.00001/commit -> $1 per 100K commit messages!
+- 🤖 AI-powered commit message generation with multiple options:
+  - Local [Ollama](https://ollama.ai/) support - Completely FREE and private!
+    - No API key required
+    - Works offline
+    - Supports various models (codellama, llama2, etc.)
+  - OpenRouter (default) using `google/gemini-flash-1.5-8b` - SUPER CHEAP!
+    - Around $0.00001/commit -> $1 per 100K commit messages!
+  - Custom API support - Bring your own provider!
 - 📝 Follows [Conventional Commits](https://www.conventionalcommits.org/) format
 - 🔒 Secure local API key storage
 - 🚀 Automatic git commit and push
@@ -21,8 +27,10 @@ Your commit messages will look like this:
 - Git installed and configured
 - For Windows: Git Bash or WSL installed
 - For Linux/macOS: Bash shell environment
-- An [OpenRouter](https://openrouter.ai/) API key
 - `curl` installed
+- One of the following:
+  - An [OpenRouter](https://openrouter.ai/) API key (default)
+  - [Ollama](https://ollama.ai/) installed and running locally
 
 ## Installation
 
@@ -73,6 +81,8 @@ This will:
 
 ## Configuration
 
+### OpenRouter (Default)
+
 Set up your OpenRouter API key:
 
 ```bash
@@ -82,6 +92,15 @@ cmai <your_openrouter_api_key>
 The API key will be securely stored in:
 - Linux/macOS: `~/.config/git-commit-ai/config`
 - Windows: `%USERPROFILE%\.config\git-commit-ai\config`
+
+### Ollama (Local)
+
+1. Install Ollama from https://ollama.ai/
+2. Pull your preferred model (e.g., codellama):
+```bash
+ollama pull codellama
+```
+3. Make sure Ollama is running in the background
 
 ## Usage
 
@@ -101,12 +120,47 @@ cmai --push
 cmai -p
 ```
 
-To use a different AI model:
+### AI Provider Options
+
+By default, CMAI uses OpenRouter with the `google/gemini-flash-1.5-8b` model. You can switch between different providers:
+
+```bash
+# Use Ollama (local)
+cmai --use-ollama
+
+# Switch back to OpenRouter
+cmai --use-openrouter
+
+# Use a custom provider
+cmai --use-custom http://your-api-endpoint
+```
+
+The provider choice is saved for future use, so you only need to specify it once.
+
+### Model Selection
+
+#### OpenRouter Models
+When using OpenRouter, you can choose from their available models:
 ```bash
 cmai --model qwen/qwen-2.5-coder-32b-instruct
 ```
-
 List of available models: https://openrouter.ai/models
+
+#### Ollama Models
+When using Ollama, first pull your desired model:
+```bash
+# Pull the model
+ollama pull codellama
+
+# Use the model
+cmai --model codellama
+```
+List of available models: https://ollama.ai/library
+
+Popular models for commit messages:
+- `codellama` - Optimized for code understanding
+- `llama2` - Good all-around performance
+- `mistral` - Fast and efficient
 
 This will:
 - Stage all changes
@@ -127,29 +181,81 @@ You can combine flags:
 cmai --debug --push
 ```
 
-## Examples
+## Command Line Options
 
 ```bash
+Usage: cmai [options] [api_key]
+
+Options:
+  --debug               Enable debug mode
+  --push, -p            Push changes after commit
+  --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)
+  --use-ollama          Use Ollama as provider (saves for future use)
+  --use-openrouter      Use OpenRouter as provider (saves for future use)
+  --use-custom <url>    Use custom provider with base URL (saves for future use)
+  -h, --help            Show this help message
+```
+
+## Examples
+
+### OpenRouter (Default)
+```bash
 # First time setup with API key
-cmai your_openrouter_api_key
+cmai <your_openrouter_api_key>
 
 # Normal usage
 cmai
 
+# Use a different OpenRouter model
+cmai --model "google/gemini-flash-1.5-8b"
+
+# Debug mode with push
+cmai --debug --push
+```
+
+### Ollama (Local)
+```bash
+# Switch to Ollama provider
+cmai --use-ollama
+
+# Use a specific Ollama model
+cmai --model codellama
+
+# Debug mode with Ollama
+cmai --debug --use-ollama
+```
+
+### Custom Provider
+```bash
+# Use a custom API provider
+cmai --use-custom http://my-api.com
+
+# Use custom provider with specific model
+cmai --use-custom http://my-api.com --model my-custom-model
+```
+
+# Use a different Ollama model
+cmai --use-ollama --model codellama
+
+# Use Ollama with debug and push
+cmai --use-ollama --debug --push
+```
+
+### Common Options
+```bash
 # Commit and push
 cmai --push
+# or
+cmai -p
 
 # Debug mode
 cmai --debug
 
-# Debug mode with push
-cmai --debug --push
-
-# Use a different AI model
-cmai --model qwen/qwen-2.5-coder-32b-instruct
+# Use a different API endpoint
+cmai --base-url https://api.example.com/v1
 
 # Combine multiple flags
-cmai --debug --push --model qwen/qwen-2.5-coder-32b-instruct
+cmai --debug --push --model your-model --base-url https://api.example.com/v1
 ```
 
 Example generated commit messages:
@@ -168,11 +274,16 @@ Example generated commit messages:
 │ └── git-commit.sh
 ├── .config/
 │ └── git-commit-ai/
-│ └── config
+│   ├── config       # API key
+│   ├── model        # Selected AI model
+│   ├── provider     # Selected provider (openrouter/ollama/custom)
+│   └── base_url     # API base URL
+│   ├── model
+│   └── base_url
 └── usr/
-└── local/
-└── bin/
-└── cmai -> ~/git-commit-ai/git-commit.sh
+  └── local/
+    └── bin/
+      └── cmai -> ~/git-commit-ai/git-commit.sh
 ```
 
 ### Windows
@@ -182,8 +293,10 @@ Example generated commit messages:
 ├── git-commit-ai/
 │ └── cmai.sh
 └── .config/
-└── git-commit-ai/
-└── config
+  └── git-commit-ai/
+    ├── config
+    ├── model
+    └── base_url
 ```
 
 ## Security
