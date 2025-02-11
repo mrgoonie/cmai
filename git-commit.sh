@@ -18,13 +18,6 @@ PROVIDER_CUSTOM="custom"
 OPENROUTER_URL="https://openrouter.ai/api/v1"
 OLLAMA_URL="http://localhost:11434/api"
 
-# Default provider and base URL
-PROVIDER="$PROVIDER_OPENROUTER"
-BASE_URL="$OPENROUTER_URL"
-
-# Default models for providers
-OLLAMA_MODEL="codellama"
-
 # Debug function
 debug_log() {
     if [ "$DEBUG" = true ]; then
@@ -100,6 +93,19 @@ get_base_url() {
         echo "$OPENROUTER_URL"  # Default base URL
     fi
 }
+
+# Load saved provider and base URL or use defaults
+PROVIDER=$(get_provider)
+BASE_URL=$(get_base_url)
+
+# If no saved provider, use defaults
+if [ -z "$PROVIDER" ]; then
+    PROVIDER="$PROVIDER_OPENROUTER"
+    BASE_URL="$OPENROUTER_URL"
+fi
+
+# Default models for providers
+OLLAMA_MODEL="codellama"
 
 # Get saved model or use default
 MODEL=$(get_model)
