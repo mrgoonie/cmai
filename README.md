@@ -181,6 +181,21 @@ You can combine flags:
 cmai --debug --push
 ```
 
+## Command Line Options
+
+```bash
+Usage: cmai [options] [api_key]
+
+Options:
+  --debug               Enable debug mode
+  --push, -p            Push changes after commit
+  --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)
+  --use-ollama          Use Ollama as provider (saves for future use)
+  --use-openrouter      Use OpenRouter as provider (saves for future use)
+  --use-custom <url>    Use custom provider with base URL (saves for future use)
+  -h, --help            Show this help message
+```
+
 ## Examples
 
 ### OpenRouter (Default)
@@ -193,12 +208,31 @@ cmai
 
 # Use a different OpenRouter model
 cmai --model claude-3-opus-20240229
+
+# Debug mode with push
+cmai --debug --push
 ```
 
 ### Ollama (Local)
 ```bash
-# Use local Ollama
+# Switch to Ollama provider
 cmai --use-ollama
+
+# Use a specific Ollama model
+cmai --model codellama
+
+# Debug mode with Ollama
+cmai --debug --use-ollama
+```
+
+### Custom Provider
+```bash
+# Use a custom API provider
+cmai --use-custom http://my-api.com
+
+# Use custom provider with specific model
+cmai --use-custom http://my-api.com --model my-custom-model
+```
 
 # Use a different Ollama model
 cmai --use-ollama --model codellama
@@ -240,7 +274,10 @@ Example generated commit messages:
 │ └── git-commit.sh
 ├── .config/
 │ └── git-commit-ai/
-│   ├── config
+│   ├── config       # API key
+│   ├── model        # Selected AI model
+│   ├── provider     # Selected provider (openrouter/ollama/custom)
+│   └── base_url     # API base URL
 │   ├── model
 │   └── base_url
 └── usr/
