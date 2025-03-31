@@ -324,7 +324,7 @@ case "$PROVIDER" in
         cat <<EOF
 {
   "model": "$MODEL",
-  "prompt": "Generate a conventional commit message for these changes: $FORMATTED_CHANGES. Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: 50-70 chars, imperative mood, no period\n- Body: explain what and why\n- Use fix for minor changes\n- Response should be the commit message only, no explanations.",
+  "prompt": "Generate a conventional commit message for these changes: \n<file_changes>\n$FORMATTED_CHANGES.\n</file_changes>\n\n## Instructions:\n- Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Scope: max 3 words.\n- Subject: max 70 characters, imperative mood, no period.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations.",
   "stream": false
 }
 EOF
@@ -351,7 +351,7 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these changes:\n\nFile changes:\n$CHANGES\n\nDiff:\n$DIFF_CONTENT\n\nFormat:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject line should be 50-70 characters\n- Use imperative mood in subject line\n- Do not end subject line with period\n- Body should explain what and why, not how\n- For minor changes, use fix instead of feat\n\nResponse should be the commit message only, no explanations."
+      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$DIFF_CONTENT\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
     }
   ]
 }
@@ -374,7 +374,7 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these changes:\n\nFile changes:\n$CHANGES\n\nDiff:\n$DIFF_CONTENT\n\nFormat:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject line should be 50-70 characters\n- Use imperative mood in subject line\n- Do not end subject line with period\n- Body should explain what and why, not how\n- For minor changes, use fix instead of feat\n\nResponse should be the commit message only, no explanations."
+      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$DIFF_CONTENT\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
     }
   ]
 }
