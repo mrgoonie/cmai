@@ -356,6 +356,7 @@ EOF
         cat <<EOF
 {
   "model": "$MODEL",
+  "stream": false,
   "messages": [
     {
       "role": "system",
@@ -363,7 +364,7 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these git changes. Follow the conventional commits format: <type>(<scope>): <subject>\n\n<body>\n\nWhere type is one of: feat, fix, docs, style, refactor, perf, test, chore. Keep the subject under 70 chars."
+      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
     }
   ]
 }
@@ -392,7 +393,7 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$DIFF_CONTENT\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
+      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$DIFF_CONTENT\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
     }
   ]
 }
@@ -415,7 +416,7 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$DIFF_CONTENT\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
+      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$DIFF_CONTENT\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
     }
   ]
 }
