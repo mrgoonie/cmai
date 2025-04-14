@@ -326,6 +326,12 @@ fi
 
 # Format changes into a single line
 FORMATTED_CHANGES=$(echo "$CHANGES" | tr '\n' ' ' | sed 's/  */ /g')
+
+# Create a simplified diff for LMStudio that avoids JSON escaping issues
+# Extract only the file names and modification types
+SIMPLIFIED_DIFF=$(echo "$CHANGES" | sed 's/^\([A-Z]\) \(.*\)$/\1: \2/' | tr '\n' ' ')
+
+# Format diff for other providers
 FORMATTED_DIFF=$(echo "$DIFF_CONTENT" | tr '\n' '\\n' | sed 's/"/\\"/g')
 
 # Make the API request
@@ -339,7 +345,7 @@ case "$PROVIDER" in
         cat <<EOF
 {
   "model": "$MODEL",
-  "prompt": "Generate a conventional commit message for these changes: \n<file_changes>\n$FORMATTED_CHANGES.\n</file_changes>\n\n## Instructions:\n- Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Scope: max 3 words.\n- Subject: max 70 characters, imperative mood, no period.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations.",
+  "prompt": "Generate a conventional commit message for these changes: \n<file_changes>\n$FORMATTED_CHANGES.\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Instructions:\n- Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Scope: max 3 words.\n- Subject: max 70 characters, imperative mood, no period.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations.",
   "stream": false
 }
 EOF
@@ -350,13 +356,13 @@ EOF
     ENDPOINT="chat/completions"
     HEADERS=(-H "Content-Type: application/json")
     
-    # Create a simplified message for LMStudio
-    # Looking at the error, we need to simplify the request to avoid parsing issues
-    REQUEST_BODY=$(
-        cat <<EOF
+    # Use a temp file to avoid JSON escaping issues with heredocs
+    TEMP_REQUEST_FILE="$(mktemp)"
+    
+    # Write a clean JSON request to the temp file
+    cat > "$TEMP_REQUEST_FILE" << EOF
 {
   "model": "$MODEL",
-  "stream": false,
   "messages": [
     {
       "role": "system",
@@ -364,12 +370,18 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
+      "content": "Generate a commit message for these changed files: $SIMPLIFIED_DIFF\n\nFollow the conventional commits format: <type>(<scope>): <subject>\n\n<body>\n\nWhere type is one of: feat, fix, docs, style, refactor, perf, test, chore. Keep the subject under 70 chars."
     }
   ]
 }
 EOF
-    )
+    
+    # Read the request body from the temp file
+    REQUEST_BODY="$(cat "$TEMP_REQUEST_FILE")"
+    
+    # Clean up the temp file
+    rm -f "$TEMP_REQUEST_FILE"
+    
     debug_log "LMStudio request body:" "$REQUEST_BODY"
     ;;
 "$PROVIDER_OPENROUTER")
@@ -393,7 +405,7 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$DIFF_CONTENT\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
+      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
     }
   ]
 }
@@ -416,7 +428,7 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$DIFF_CONTENT\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
+      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
     }
   ]
 }
