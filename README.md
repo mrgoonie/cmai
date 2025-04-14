@@ -9,7 +9,7 @@ Your commit messages will look like this:
 ## Features
 
 - 🤖 AI-powered commit message generation with multiple options:
-  - Local [Ollama](https://ollama.ai/) support - Completely FREE and private!
+  - Local [Ollama](https://ollama.ai/) support - **Completely FREE and private!**
     - No API key required
     - Works offline
     - Supports various models (codellama, llama2, etc.)

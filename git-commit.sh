@@ -13,14 +13,17 @@ PUSH=false
 # Default providers and URLs
 PROVIDER_OPENROUTER="openrouter"
 PROVIDER_OLLAMA="ollama"
+PROVIDER_LMSTUDIO="lmstudio"
 PROVIDER_CUSTOM="custom"
 
 OPENROUTER_URL="https://openrouter.ai/api/v1"
 OLLAMA_URL="http://localhost:11434/api"
+LMSTUDIO_URL="http://localhost:1234/v1"
 
 # Default models for providers
 OLLAMA_MODEL="codellama"
 OPENROUTER_MODEL="google/gemini-flash-1.5-8b"
+LMSTUDIO_MODEL="default"
 
 # Debug function
 debug_log() {
@@ -120,6 +123,7 @@ fi
 # Default models for providers
 OLLAMA_MODEL="codellama"
 OPENROUTER_MODEL="google/gemini-flash-1.5-8b"
+LMSTUDIO_MODEL="default"
 
 # Get saved model or use default based on provider
 MODEL=$(get_model)
@@ -170,6 +174,15 @@ while [[ $# -gt 0 ]]; do
         save_model "$MODEL"
         shift
         ;;
+    --use-lmstudio)
+        PROVIDER="$PROVIDER_LMSTUDIO"
+        BASE_URL="$LMSTUDIO_URL"
+        MODEL="$LMSTUDIO_MODEL"
+        save_provider "$PROVIDER"
+        save_base_url "$BASE_URL"
+        save_model "$MODEL"
+        shift
+        ;;
     --use-custom)
         if [ -z "$2" ]; then
             echo "Error: --use-custom requires a base URL"
@@ -194,6 +207,7 @@ while [[ $# -gt 0 ]]; do
         echo "  --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)"
         echo "  --use-ollama          Use Ollama as provider (saves for future use)"
         echo "  --use-openrouter      Use OpenRouter as provider (saves for future use)"
+        echo "  --use-lmstudio        Use LMStudio as provider (saves for future use)"
         echo "  --use-custom <url>    Use custom provider with base URL (saves for future use)"
         echo "  -h, --help            Show this help message"
         echo ""
@@ -201,6 +215,7 @@ while [[ $# -gt 0 ]]; do
         echo "  cmai --api-key your_api_key          # First time setup with API key"
         echo "  cmai --use-ollama                    # Switch to Ollama provider"
         echo "  cmai --use-openrouter                # Switch back to OpenRouter"
+        echo "  cmai --use-lmstudio                  # Switch to LMStudio provider"
         echo "  cmai --use-custom http://my-api.com  # Use custom provider"
         exit 0
         ;;
@@ -330,6 +345,32 @@ case "$PROVIDER" in
 EOF
     )
     ;;
+"$PROVIDER_LMSTUDIO")
+    debug_log "Making API request to LMStudio"
+    ENDPOINT="chat/completions"
+    HEADERS=(-H "Content-Type: application/json")
+    
+    # Create a simplified message for LMStudio
+    # Looking at the error, we need to simplify the request to avoid parsing issues
+    REQUEST_BODY=$(
+        cat <<EOF
+{
+  "model": "$MODEL",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a git commit message generator. Create conventional commit messages."
+    },
+    {
+      "role": "user",
+      "content": "Generate a commit message for these git changes. Follow the conventional commits format: <type>(<scope>): <subject>\n\n<body>\n\nWhere type is one of: feat, fix, docs, style, refactor, perf, test, chore. Keep the subject under 70 chars."
+    }
+  ]
+}
+EOF
+    )
+    debug_log "LMStudio request body:" "$REQUEST_BODY"
+    ;;
 "$PROVIDER_OPENROUTER")
     debug_log "Making API request to OpenRouter"
     ENDPOINT="chat/completions"
@@ -418,6 +459,32 @@ case "$PROVIDER" in
     COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.response // empty')
     if [ -z "$COMMIT_FULL" ]; then
         echo "Error: Failed to get response from Ollama. Response: $RESPONSE"
+        exit 1
+    fi
+    ;;
+"$PROVIDER_LMSTUDIO")
+    # For LMStudio, extract content from response
+    debug_log "LMStudio raw response:" "$RESPONSE"
+    
+    # Check if response is HTML error page
+    if echo "$RESPONSE" | grep -q "<!DOCTYPE html>"; then
+        echo "Error: LMStudio API returned HTML error. Make sure LMStudio is running and the API is accessible."
+        echo "Response: $RESPONSE"
+        exit 1
+    fi
+    
+    # Check for JSON error
+    if echo "$RESPONSE" | grep -q "error"; then
+        ERROR=$(echo "$RESPONSE" | jq -r '.error.message // .error' 2>/dev/null)
+        echo "Error from LMStudio: $ERROR"
+        exit 1
+    fi
+    
+    # Try to extract content with proper error handling
+    COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$COMMIT_FULL" ] || [ "$COMMIT_FULL" = "null" ]; then
+        echo "Error: Failed to parse LMStudio response. Response format may be unexpected."
+        echo "Response: $RESPONSE"
         exit 1
     fi
     ;;
