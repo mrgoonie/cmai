@@ -355,12 +355,12 @@ EOF
     debug_log "Making API request to LMStudio"
     ENDPOINT="chat/completions"
     HEADERS=(-H "Content-Type: application/json")
-    
+
     # Use a temp file to avoid JSON escaping issues with heredocs
     TEMP_REQUEST_FILE="$(mktemp)"
-    
+
     # Write a clean JSON request to the temp file
-    cat > "$TEMP_REQUEST_FILE" << EOF
+    cat >"$TEMP_REQUEST_FILE" <<EOF
 {
   "model": "$MODEL",
   "messages": [
@@ -370,18 +370,18 @@ EOF
     },
     {
       "role": "user",
-      "content": "Generate a commit message for these changed files: $SIMPLIFIED_DIFF\n\nFollow the conventional commits format: <type>(<scope>): <subject>\n\n<body>\n\nWhere type is one of: feat, fix, docs, style, refactor, perf, test, chore. Keep the subject under 70 chars."
+      "content": "Generate a commit message for these changed files:  \n<file_changes>\n$FORMATTED_CHANGES.\n</file_changes>\n\n## Diff:\n<diff>\n$SIMPLIFIED_DIFF\n</diff>\n\nFollow the conventional commits format: <type>(<scope>): <subject>\n\n<body>\n\nWhere type is one of: feat, fix, docs, style, refactor, perf, test, chore.\n- Scope: max 3 words.\n- Keep the subject under 70 chars.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
     }
   ]
 }
 EOF
-    
+
     # Read the request body from the temp file
     REQUEST_BODY="$(cat "$TEMP_REQUEST_FILE")"
-    
+
     # Clean up the temp file
     rm -f "$TEMP_REQUEST_FILE"
-    
+
     debug_log "LMStudio request body:" "$REQUEST_BODY"
     ;;
 "$PROVIDER_OPENROUTER")
@@ -478,21 +478,21 @@ case "$PROVIDER" in
 "$PROVIDER_LMSTUDIO")
     # For LMStudio, extract content from response
     debug_log "LMStudio raw response:" "$RESPONSE"
-    
+
     # Check if response is HTML error page
     if echo "$RESPONSE" | grep -q "<!DOCTYPE html>"; then
         echo "Error: LMStudio API returned HTML error. Make sure LMStudio is running and the API is accessible."
         echo "Response: $RESPONSE"
         exit 1
     fi
-    
+
     # Check for JSON error
     if echo "$RESPONSE" | grep -q "error"; then
         ERROR=$(echo "$RESPONSE" | jq -r '.error.message // .error' 2>/dev/null)
         echo "Error from LMStudio: $ERROR"
         exit 1
     fi
-    
+
     # Try to extract content with proper error handling
     COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null)
     if [ $? -ne 0 ] || [ -z "$COMMIT_FULL" ] || [ "$COMMIT_FULL" = "null" ]; then
