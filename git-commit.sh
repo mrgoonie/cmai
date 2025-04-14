@@ -324,12 +324,12 @@ if [ -z "$MODEL" ]; then
     esac
 fi
 
-# Format changes into a single line
-FORMATTED_CHANGES=$(echo "$CHANGES" | tr '\n' ' ' | sed 's/  */ /g')
+# Format changes into a single line and replace \M with newlines
+FORMATTED_CHANGES=$(echo "$CHANGES" | sed 's/\\M/\n/g' | tr '\n' ' ' | sed 's/  */ /g')
 
 # Create a simplified diff for LMStudio that avoids JSON escaping issues
-# Extract only the file names and modification types
-SIMPLIFIED_DIFF=$(echo "$CHANGES" | sed 's/^\([A-Z]\) \(.*\)$/\1: \2/' | tr '\n' ' ')
+# Extract only the file names and modification types and replace \M with newlines
+SIMPLIFIED_DIFF=$(echo "$CHANGES" | sed 's/\\M/\n/g' | sed 's/^\([A-Z]\) \(.*\)$/\1: \2/' | tr '\n' ' ')
 
 # Format diff for other providers
 # Replace newlines with \n, and both \M and \nM with \n, then escape double quotes
