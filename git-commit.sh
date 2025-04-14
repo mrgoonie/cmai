@@ -332,7 +332,8 @@ FORMATTED_CHANGES=$(echo "$CHANGES" | tr '\n' ' ' | sed 's/  */ /g')
 SIMPLIFIED_DIFF=$(echo "$CHANGES" | sed 's/^\([A-Z]\) \(.*\)$/\1: \2/' | tr '\n' ' ')
 
 # Format diff for other providers
-FORMATTED_DIFF=$(echo "$DIFF_CONTENT" | tr '\n' '\\n' | sed 's/"/\\"/g')
+# Replace newlines with \n and \M with \n, then escape double quotes
+FORMATTED_DIFF=$(echo "$DIFF_CONTENT" | tr '\n' '\\n' | sed 's/\\M/\\n/g' | sed 's/"/\\"/g')
 
 # Make the API request
 case "$PROVIDER" in
@@ -486,8 +487,8 @@ case "$PROVIDER" in
         exit 1
     fi
 
-    # Check for JSON error
-    if echo "$RESPONSE" | grep -q "error"; then
+    # Check for JSON error - only if there's an actual error field with content
+    if echo "$RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
         ERROR=$(echo "$RESPONSE" | jq -r '.error.message // .error' 2>/dev/null)
         echo "Error from LMStudio: $ERROR"
         exit 1
