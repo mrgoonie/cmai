@@ -9,10 +9,14 @@ Your commit messages will look like this:
 ## Features
 
 - 🤖 AI-powered commit message generation with multiple options:
-  - Local [Ollama](https://ollama.ai/) support - Completely FREE and private!
+  - Local [Ollama](https://ollama.ai/) support - **Completely FREE and private!**
     - No API key required
     - Works offline
     - Supports various models (codellama, llama2, etc.)
+  - Local [LMStudio](https://lmstudio.ai/) support - **Completely FREE and private!**
+    - Works with any model you have in LMStudio
+    - Uses the OpenAI-compatible API
+    - Great for privacy and offline use
   - OpenRouter (default) using `google/gemini-flash-1.5-8b` - SUPER CHEAP!
     - Around $0.00001/commit -> $1 per 100K commit messages!
   - Custom API support - Bring your own provider!
@@ -31,6 +35,7 @@ Your commit messages will look like this:
 - One of the following:
   - An [OpenRouter](https://openrouter.ai/) API key (default)
   - [Ollama](https://ollama.ai/) installed and running locally
+  - [LMStudio](https://lmstudio.ai/) installed and running locally
 
 ## Installation
 
@@ -102,6 +107,13 @@ ollama pull deepseek-r1:7b
 ```
 3. Make sure Ollama is running in the background
 
+### LMStudio (Local)
+
+1. Install LMStudio from https://lmstudio.ai/
+2. Download and load your preferred model in LMStudio
+3. Start the local server in LMStudio by clicking on "Start Server" in the Chat tab
+4. The server will run on http://localhost:1234/v1 by default
+
 ## Usage
 
 ![Usage Demonstration](./usage.png)
@@ -127,6 +139,9 @@ By default, CMAI uses OpenRouter with the `google/gemini-flash-1.5-8b` model. Yo
 ```bash
 # Use Ollama (local)
 cmai --use-ollama
+
+# Use LMStudio (local)
+cmai --use-lmstudio
 
 # Switch back to OpenRouter
 cmai --use-openrouter
@@ -191,6 +206,7 @@ Options:
   --push, -p            Push changes after commit
   --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)
   --use-ollama          Use Ollama as provider (saves for future use)
+  --use-lmstudio        Use LMStudio as provider (saves for future use)
   --use-openrouter      Use OpenRouter as provider (saves for future use)
   --use-custom <url>    Use custom provider with base URL (saves for future use)
   -h, --help            Show this help message
@@ -223,6 +239,18 @@ cmai --model deepseek-r1:7b
 
 # Debug mode with Ollama
 cmai --debug --use-ollama
+```
+
+### LMStudio (Local)
+```bash
+# Switch to LMStudio provider
+cmai --use-lmstudio
+
+# Use a specific model in LMStudio
+cmai --model "your-model-name"
+
+# Debug mode with LMStudio
+cmai --debug --use-lmstudio
 ```
 
 ### Custom Provider
