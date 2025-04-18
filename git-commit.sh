@@ -104,10 +104,12 @@ get_base_url() {
     fi
 }
 
-# Replace all linebreaks with proper JSON escaping
+# Replace linebreaks and special sequences for proper JSON formatting
 function replace_linebreaks() {
     local input="$1"
-    printf '%s' "$input" | tr '\n' '\\n' | sed 's/\n$//'
+    printf '%s' "$input" | tr '\n' '\\n ' | sed 's/\n$//' | \
+        sed 's/\\M/ M /g' | sed 's/\\A/ A /g' | \
+        sed 's/\\nM/ M /g' | sed 's/\\nA/ A /g'
 }
 
 # Load saved provider and base URL or use defaults
@@ -324,16 +326,16 @@ if [ -z "$MODEL" ]; then
     esac
 fi
 
-# Format changes into a single line and replace \M with newlines
-FORMATTED_CHANGES=$(echo "$CHANGES" | sed 's/\\M/\n/g' | tr '\n' ' ' | sed 's/  */ /g')
+# Format changes into a single line and replace \A with newlines
+FORMATTED_CHANGES=$(echo "$CHANGES" | sed 's/\\A/\n/g' | tr '\n' ' ' | sed 's/  */ /g')
 
 # Create a simplified diff for LMStudio that avoids JSON escaping issues
-# Extract only the file names and modification types and replace \M with newlines
-SIMPLIFIED_DIFF=$(echo "$CHANGES" | sed 's/\\M/\n/g' | sed 's/^\([A-Z]\) \(.*\)$/\1: \2/' | tr '\n' ' ')
+# Extract only the file names and modification types and replace \A with newlines
+SIMPLIFIED_DIFF=$(echo "$CHANGES" | sed 's/\\A/\n/g' | sed 's/^\([A-Z]\) \(.*\)$/\1: \2/' | tr '\n' ' ')
 
 # Format diff for other providers
-# Replace newlines with \n, and both \M and \nM with \n, then escape double quotes
-FORMATTED_DIFF=$(echo "$DIFF_CONTENT" | tr '\n' '\\n' | sed 's/\\M/\\n/g' | sed 's/\\nM/\\n/g' | sed 's/"/\\"/g')
+# Replace newlines with \n, and both \A and \nA with \n, then escape double quotes
+FORMATTED_DIFF=$(echo "$DIFF_CONTENT" | tr '\n' '\\n' | sed 's/\\M/ M /g' | sed 's/\\A/\\n/g' | sed 's/\\nA/\\n/g' | sed 's/\\nM/M/g' | sed 's/"/\\"/g')
 
 # Make the API request
 case "$PROVIDER" in
@@ -346,7 +348,7 @@ case "$PROVIDER" in
         cat <<EOF
 {
   "model": "$MODEL",
-  "prompt": "Generate a conventional commit message for these changes: \n<file_changes>\n$FORMATTED_CHANGES.\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Instructions:\n- Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Scope: max 3 words.\n- Subject: max 70 characters, imperative mood, no period.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations.",
+  "prompt": "Generate a conventional commit message for these changes: \n<file_changes>\n $SIMPLIFIED_DIFF \n</file_changes>\n\n## Diff:\n<diff>\n $FORMATTED_DIFF \n</diff>\n\n## Instructions:\n- Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Scope: max 3 words.\n- Subject: max 70 characters, imperative mood, no period.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations.",
   "stream": false
 }
 EOF
@@ -357,31 +359,16 @@ EOF
     ENDPOINT="chat/completions"
     HEADERS=(-H "Content-Type: application/json")
 
-    # Use a temp file to avoid JSON escaping issues with heredocs
-    TEMP_REQUEST_FILE="$(mktemp)"
-
-    # Write a clean JSON request to the temp file
-    cat >"$TEMP_REQUEST_FILE" <<EOF
-{
-  "model": "$MODEL",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a git commit message generator. Create conventional commit messages."
-    },
-    {
-      "role": "user",
-      "content": "Generate a commit message for these changed files:  \n<file_changes>\n$FORMATTED_CHANGES.\n</file_changes>\n\n## Diff:\n<diff>\n$SIMPLIFIED_DIFF\n</diff>\n\nFollow the conventional commits format: <type>(<scope>): <subject>\n\n<body>\n\nWhere type is one of: feat, fix, docs, style, refactor, perf, test, chore.\n- Scope: max 3 words.\n- Keep the subject under 70 chars.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
-    }
-  ]
-}
-EOF
-
-    # Read the request body from the temp file
-    REQUEST_BODY="$(cat "$TEMP_REQUEST_FILE")"
-
-    # Clean up the temp file
-    rm -f "$TEMP_REQUEST_FILE"
+    # Create JSON using jq for proper escaping
+    USER_CONTENT="Generate a commit message for these changed files:  \n<file_changes>\n $SIMPLIFIED_DIFF \n</file_changes>\n\n## Diff:\n<diff>\n $FORMATTED_DIFF \n</diff>\n\nFollow the conventional commits format: <type>(<scope>): <subject>\n\n<body>\n\nWhere type is one of: feat, fix, docs, style, refactor, perf, test, chore.\n- Scope: max 3 words.\n- Keep the subject under 70 chars.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
+    SYSTEM_CONTENT="You are a git commit message generator. Create conventional commit messages."
+    
+    # Use jq to create properly escaped JSON
+    REQUEST_BODY=$(jq -n \
+                    --arg model "$MODEL" \
+                    --arg system "$SYSTEM_CONTENT" \
+                    --arg user "$USER_CONTENT" \
+                    '{"model": $model, "stream": false, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
 
     debug_log "LMStudio request body:" "$REQUEST_BODY"
     ;;
@@ -394,47 +381,33 @@ EOF
         "Content-Type: application/json"
         "X-Title: cmai - AI Commit Message Generator"
     )
-    REQUEST_BODY=$(
-        cat <<EOF
-{
-  "model": "$MODEL",
-  "stream": false,
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a git commit message generator. Create conventional commit messages."
-    },
-    {
-      "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
-    }
-  ]
-}
-EOF
-    )
+    
+    # Create JSON using jq for proper escaping
+    USER_CONTENT="Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n $SIMPLIFIED_DIFF \n</file_changes>\n\n## Diff:\n<diff>\n $FORMATTED_DIFF \n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
+    SYSTEM_CONTENT="You are a git commit message generator. Create conventional commit messages."
+    
+    # Use jq to create properly escaped JSON
+    REQUEST_BODY=$(jq -n \
+                    --arg model "$MODEL" \
+                    --arg system "$SYSTEM_CONTENT" \
+                    --arg user "$USER_CONTENT" \
+                    '{"model": $model, "stream": false, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
     ;;
 "$PROVIDER_CUSTOM")
     debug_log "Making API request to custom provider"
     ENDPOINT="chat/completions"
     [ ! -z "$API_KEY" ] && HEADERS=(-H "Authorization: Bearer ${API_KEY}")
-    REQUEST_BODY=$(
-        cat <<EOF
-{
-  "stream": false,
-  "model": "$MODEL",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a git commit message generator. Create conventional commit messages."
-    },
-    {
-      "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
-    }
-  ]
-}
-EOF
-    )
+    
+    # Create JSON using jq for proper escaping
+    USER_CONTENT="Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n $SIMPLIFIED_DIFF \n</file_changes>\n\n## Diff:\n<diff>\n $FORMATTED_DIFF \n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
+    SYSTEM_CONTENT="You are a git commit message generator. Create conventional commit messages."
+    
+    # Use jq to create properly escaped JSON
+    REQUEST_BODY=$(jq -n \
+                    --arg model "$MODEL" \
+                    --arg system "$SYSTEM_CONTENT" \
+                    --arg user "$USER_CONTENT" \
+                    '{"stream": false, "model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
     ;;
 esac
 
