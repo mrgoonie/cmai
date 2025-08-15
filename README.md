@@ -196,6 +196,16 @@ You can combine flags:
 cmai --debug --push
 ```
 
+### Generate Message Only
+
+To generate a commit message without staging, committing, or pushing:
+
+```bash
+cmai --message-only
+```
+
+This is useful if you want to review the message before committing.
+
 ## Command Line Options
 
 ```bash
@@ -204,6 +214,7 @@ Usage: cmai [options] [api_key]
 Options:
   --debug               Enable debug mode
   --push, -p            Push changes after commit
+  --message-only        Generate message only, no git add/commit/push
   --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)
   --use-ollama          Use Ollama as provider (saves for future use)
   --use-lmstudio        Use LMStudio as provider (saves for future use)
@@ -227,6 +238,9 @@ cmai --model "google/gemini-flash-1.5-8b"
 
 # Debug mode with push
 cmai --debug --push
+
+# Generate message only
+cmai --message-only
 ```
 
 ### Ollama (Local)
