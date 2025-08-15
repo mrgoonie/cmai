@@ -10,6 +10,8 @@ PROVIDER_FILE="$CONFIG_DIR/provider"
 DEBUG=false
 # Push flag
 PUSH=false
+# Message only flag
+MESSAGE_ONLY=false
 # Default providers and URLs
 PROVIDER_OPENROUTER="openrouter"
 PROVIDER_OLLAMA="ollama"
@@ -105,9 +107,10 @@ get_base_url() {
 }
 
 # Replace all linebreaks with proper JSON escaping
+# Also escape backslashes and quotes so the result is safe in JSON strings.
 function replace_linebreaks() {
     local input="$1"
-    printf '%s' "$input" | tr '\n' '\\n' | sed 's/\n$//'
+    printf '%s' "$input" | sed ':a;N;$!ba;s/\\/\\\\/g;s/"/\\"/g;s/\n/\\n/g'
 }
 
 # Load saved provider and base URL or use defaults
@@ -198,12 +201,17 @@ while [[ $# -gt 0 ]]; do
         PUSH=true
         shift
         ;;
+    --message-only)
+        MESSAGE_ONLY=true
+        shift
+        ;;
     -h | --help)
         echo "Usage: cmai [options] [api_key]"
         echo ""
         echo "Options:"
         echo "  --debug               Enable debug mode"
         echo "  --push, -p            Push changes after commit"
+        echo "  --message-only        Generate message only, no git add/commit/push"
         echo "  --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)"
         echo "  --use-ollama          Use Ollama as provider (saves for future use)"
         echo "  --use-openrouter      Use OpenRouter as provider (saves for future use)"
@@ -217,6 +225,7 @@ while [[ $# -gt 0 ]]; do
         echo "  cmai --use-openrouter                # Switch back to OpenRouter"
         echo "  cmai --use-lmstudio                  # Switch to LMStudio provider"
         echo "  cmai --use-custom http://my-api.com  # Use custom provider"
+        echo "  cmai --message-only                  # Generate message only, no commit"
         exit 0
         ;;
     --model)
@@ -289,9 +298,12 @@ if [ "$PROVIDER" = "$PROVIDER_OLLAMA" ]; then
     fi
 fi
 
-# Stage all changes
-debug_log "Staging all changes"
-git add .
+# Only stage changes and check for changes if not using message-only mode
+if [ "$MESSAGE_ONLY" = false ]; then
+    # Stage all changes
+    debug_log "Staging all changes"
+    git add .
+fi
 
 # Get git changes and clean up any tabs
 # Get changes and format them appropriately for the provider
@@ -332,8 +344,8 @@ FORMATTED_CHANGES=$(echo "$CHANGES" | sed 's/\\M/\n/g' | tr '\n' ' ' | sed 's/  
 SIMPLIFIED_DIFF=$(echo "$CHANGES" | sed 's/\\M/\n/g' | sed 's/^\([A-Z]\) \(.*\)$/\1: \2/' | tr '\n' ' ')
 
 # Format diff for other providers
-# Replace newlines with \n, and both \M and \nM with \n, then escape double quotes
-FORMATTED_DIFF=$(echo "$DIFF_CONTENT" | tr '\n' '\\n' | sed 's/\\M/\\n/g' | sed 's/\\nM/\\n/g' | sed 's/"/\\"/g')
+# Properly escape backslashes, quotes, and convert real newlines to literal \n
+FORMATTED_DIFF=$(printf '%s' "$DIFF_CONTENT" | sed ':a;N;$!ba;s/\\/\\\\/g;s/"/\\"/g;s/\n/\\n/g')
 
 # Make the API request
 case "$PROVIDER" in
@@ -528,6 +540,11 @@ if [ -z "$COMMIT_FULL" ]; then
     echo "Failed to generate commit message. API response:"
     echo "$RESPONSE"
     exit 1
+fi
+
+if [ "$MESSAGE_ONLY" = true ]; then
+    echo "$COMMIT_FULL"
+    exit 0
 fi
 
 # Execute git commit
