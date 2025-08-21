@@ -106,6 +106,20 @@ get_base_url() {
     fi
 }
 
+# Function to print config
+print_config() {
+    echo "Current configuration:"
+    echo "  Provider:  $(get_provider)"
+    echo "  Base URL:  $(get_base_url)"
+    echo "  Model:     $(get_model)"
+    API_KEY=$(get_api_key)
+    if [ -z "$API_KEY" ]; then
+        echo "  API Key:   Not set"
+    else
+        echo "  API Key:   ****"
+    fi
+}
+
 # Replace all linebreaks with proper JSON escaping
 # Also escape backslashes and quotes so the result is safe in JSON strings.
 function replace_linebreaks() {
@@ -205,6 +219,10 @@ while [[ $# -gt 0 ]]; do
         MESSAGE_ONLY=true
         shift
         ;;
+    --print-config)
+        print_config
+        exit 0
+        ;;
     -h | --help)
         echo "Usage: cmai [options] [api_key]"
         echo ""
@@ -217,6 +235,7 @@ while [[ $# -gt 0 ]]; do
         echo "  --use-openrouter      Use OpenRouter as provider (saves for future use)"
         echo "  --use-lmstudio        Use LMStudio as provider (saves for future use)"
         echo "  --use-custom <url>    Use custom provider with base URL (saves for future use)"
+        echo "  --print-config        Print the current config"
         echo "  -h, --help            Show this help message"
         echo ""
         echo "Examples:"
