@@ -120,12 +120,7 @@ print_config() {
     fi
 }
 
-# Replace all linebreaks with proper JSON escaping
-# Also escape backslashes and quotes so the result is safe in JSON strings.
-function replace_linebreaks() {
-    local input="$1"
-    printf '%s' "$input" | sed ':a;N;$!ba;s/\\/\\\\/g;s/"/\\"/g;s/\n/\\n/g'
-}
+
 
 # Load saved provider and base URL or use defaults
 PROVIDER=$(get_provider)
@@ -324,13 +319,8 @@ if [ "$MESSAGE_ONLY" = false ]; then
     git add .
 fi
 
-# Get git changes and clean up any tabs
-# Get changes and format them appropriately for the provider
-if [ "$PROVIDER" = "$PROVIDER_OLLAMA" ]; then
-    CHANGES=$(git diff --cached --name-status | tr '\t' ' ' | tr '\n' ' ' | sed 's/  */ /g')
-else
-    CHANGES=$(git diff --cached --name-status | tr '\t' ' ' | sed 's/  */ /g')
-fi
+# Use a single, readable format for all providers (jq will handle JSON escaping)
+CHANGES=$(git diff --cached --name-status | tr '\t' ' ' | sed 's/  */ /g')
 # Get git diff for context
 DIFF_CONTENT=$(git diff --cached)
 debug_log "Git changes detected" "$CHANGES"
@@ -339,9 +329,6 @@ if [ -z "$CHANGES" ]; then
     echo "No staged changes found. Please stage your changes using 'git add' first."
     exit 1
 fi
-
-# Remove all linebreaks from CHANGES
-CHANGES=$(replace_linebreaks "$CHANGES")
 
 # Set model based on provider if not explicitly specified
 if [ -z "$MODEL" ]; then
@@ -355,16 +342,35 @@ if [ -z "$MODEL" ]; then
     esac
 fi
 
-# Format changes into a single line and replace \M with newlines
-FORMATTED_CHANGES=$(echo "$CHANGES" | sed 's/\\M/\n/g' | tr '\n' ' ' | sed 's/  */ /g')
+# Assemble the user prompt with raw content; jq will escape JSON safely
+USER_CONTENT=$(cat <<EOF
+Generate a commit message for these changes:
 
-# Create a simplified diff for LMStudio that avoids JSON escaping issues
-# Extract only the file names and modification types and replace \M with newlines
-SIMPLIFIED_DIFF=$(echo "$CHANGES" | sed 's/\\M/\n/g' | sed 's/^\([A-Z]\) \(.*\)$/\1: \2/' | tr '\n' ' ')
+## File changes:
+<file_changes>
+$CHANGES
+</file_changes>
 
-# Format diff for other providers
-# Properly escape backslashes, quotes, and convert real newlines to literal \n
-FORMATTED_DIFF=$(printf '%s' "$DIFF_CONTENT" | sed ':a;N;$!ba;s/\\/\\\\/g;s/"/\\"/g;s/\n/\\n/g')
+## Diff:
+<diff>
+$DIFF_CONTENT
+</diff>
+
+## Format:
+<type>(<scope>): <subject>
+
+<body>
+
+Important:
+- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore
+- Subject: max 70 characters, imperative mood, no period
+- Body: list changes to explain what and why, not how
+- Scope: max 3 words
+- For minor changes: use 'fix' instead of 'feat'
+- Do not wrap your response in triple backticks
+- Response should be the commit message only, no explanations.
+EOF
+)
 
 # Make the API request
 case "$PROVIDER" in
@@ -373,47 +379,26 @@ case "$PROVIDER" in
     ENDPOINT="api/generate"
     HEADERS=(-H "Content-Type: application/json")
     BASE_URL="http://localhost:11434"
-    REQUEST_BODY=$(
-        cat <<EOF
-{
-  "model": "$MODEL",
-  "prompt": "Generate a conventional commit message for these changes: \n<file_changes>\n$FORMATTED_CHANGES.\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Instructions:\n- Format should be: <type>(<scope>): <subject>\n\n<body>\n\nRules:\n- Type: feat, fix, docs, style, refactor, perf, test, chore\n- Scope: max 3 words.\n- Subject: max 70 characters, imperative mood, no period.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations.",
-  "stream": false
-}
-EOF
-    )
+    REQUEST_BODY=$(jq -n \
+        --arg model "$MODEL" \
+        --arg prompt "$USER_CONTENT" \
+        '{model:$model, prompt:$prompt, stream:false}')
     ;;
 "$PROVIDER_LMSTUDIO")
     debug_log "Making API request to LMStudio"
     ENDPOINT="chat/completions"
     HEADERS=(-H "Content-Type: application/json")
-
-    # Use a temp file to avoid JSON escaping issues with heredocs
-    TEMP_REQUEST_FILE="$(mktemp)"
-
-    # Write a clean JSON request to the temp file
-    cat >"$TEMP_REQUEST_FILE" <<EOF
-{
-  "model": "$MODEL",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a git commit message generator. Create conventional commit messages."
-    },
-    {
-      "role": "user",
-      "content": "Generate a commit message for these changed files:  \n<file_changes>\n$FORMATTED_CHANGES.\n</file_changes>\n\n## Diff:\n<diff>\n$SIMPLIFIED_DIFF\n</diff>\n\nFollow the conventional commits format: <type>(<scope>): <subject>\n\n<body>\n\nWhere type is one of: feat, fix, docs, style, refactor, perf, test, chore.\n- Scope: max 3 words.\n- Keep the subject under 70 chars.\n- Body: list changes to explain what and why\n- Use 'fix' for minor changes\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
-    }
-  ]
-}
-EOF
-
-    # Read the request body from the temp file
-    REQUEST_BODY="$(cat "$TEMP_REQUEST_FILE")"
-
-    # Clean up the temp file
-    rm -f "$TEMP_REQUEST_FILE"
-
+    REQUEST_BODY=$(jq -n \
+        --arg model "$MODEL" \
+        --arg content "$USER_CONTENT" \
+        '{
+           model: $model,
+           stream: false,
+           messages: [
+             {role:"system", content:"You are a git commit message generator. Create conventional commit messages."},
+             {role:"user",   content:$content}
+           ]
+         }')
     debug_log "LMStudio request body:" "$REQUEST_BODY"
     ;;
 "$PROVIDER_OPENROUTER")
@@ -425,54 +410,41 @@ EOF
         "Content-Type: application/json"
         "X-Title: cmai - AI Commit Message Generator"
     )
-    REQUEST_BODY=$(
-        cat <<EOF
-{
-  "model": "$MODEL",
-  "stream": false,
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a git commit message generator. Create conventional commit messages."
-    },
-    {
-      "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
-    }
-  ]
-}
-EOF
-    )
+    REQUEST_BODY=$(jq -n \
+        --arg model "$MODEL" \
+        --arg content "$USER_CONTENT" \
+        '{
+           model: $model,
+           stream: false,
+           messages: [
+             {role:"system", content:"You are a git commit message generator. Create conventional commit messages."},
+             {role:"user",   content:$content}
+           ]
+         }')
     ;;
 "$PROVIDER_CUSTOM")
     debug_log "Making API request to custom provider"
     ENDPOINT="chat/completions"
-    [ ! -z "$API_KEY" ] && HEADERS=(-H "Authorization: Bearer ${API_KEY}")
-    REQUEST_BODY=$(
-        cat <<EOF
-{
-  "stream": false,
-  "model": "$MODEL",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a git commit message generator. Create conventional commit messages."
-    },
-    {
-      "role": "user",
-      "content": "Generate a commit message for these changes:\n\n## File changes:\n<file_changes>\n$FORMATTED_CHANGES\n</file_changes>\n\n## Diff:\n<diff>\n$FORMATTED_DIFF\n</diff>\n\n## Format:\n<type>(<scope>): <subject>\n\n<body>\n\nImportant:\n- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore\n- Subject: max 70 characters, imperative mood, no period\n- Body: list changes to explain what and why, not how\n- Scope: max 3 words\n- For minor changes: use 'fix' instead of 'feat'\n- Do not wrap your response in triple backticks\n- Response should be the commit message only, no explanations."
-    }
-  ]
-}
-EOF
-    )
+    HEADERS=(-H "Content-Type: application/json")
+    [ -n "$API_KEY" ] && HEADERS+=(-H "Authorization: Bearer ${API_KEY}")
+    REQUEST_BODY=$(jq -n \
+        --arg model "$MODEL" \
+        --arg content "$USER_CONTENT" \
+        '{
+           stream: false,
+           model: $model,
+           messages: [
+             {role:"system", content:"You are a git commit message generator. Create conventional commit messages."},
+             {role:"user",   content:$content}
+           ]
+         }')
     ;;
 esac
 
 # Debug
 debug_log "Using provider: $PROVIDER"
 debug_log "Provider endpoint: $ENDPOINT"
-debug_log "Request headers: ${HEADERS}"
+debug_log "Request headers: ${HEADERS[*]}"
 debug_log "Request model: ${MODEL}"
 debug_log "Request body: $REQUEST_BODY"
 
