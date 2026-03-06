@@ -12,6 +12,10 @@ DEBUG=false
 PUSH=false
 # Message only flag
 MESSAGE_ONLY=false
+# Branch name flag
+BRANCH_NAME_ONLY=false
+# Unstaged flag
+UNSTAGED=false
 # Default providers and URLs
 PROVIDER_OPENROUTER="openrouter"
 PROVIDER_OLLAMA="ollama"
@@ -214,6 +218,14 @@ while [[ $# -gt 0 ]]; do
         MESSAGE_ONLY=true
         shift
         ;;
+    --branch-name-only)
+        BRANCH_NAME_ONLY=true
+        shift
+        ;;
+    --unstaged)
+        UNSTAGED=true
+        shift
+        ;;
     --print-config)
         print_config
         exit 0
@@ -225,6 +237,8 @@ while [[ $# -gt 0 ]]; do
         echo "  --debug               Enable debug mode"
         echo "  --push, -p            Push changes after commit"
         echo "  --message-only        Generate message only, no git add/commit/push"
+        echo "  --branch-name-only    Generate branch name only, no git add/commit/push"
+        echo "  --unstaged            Use unstaged changes for diff"
         echo "  --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)"
         echo "  --use-ollama          Use Ollama as provider (saves for future use)"
         echo "  --use-openrouter      Use OpenRouter as provider (saves for future use)"
@@ -312,21 +326,28 @@ if [ "$PROVIDER" = "$PROVIDER_OLLAMA" ]; then
     fi
 fi
 
-# Only stage changes and check for changes if not using message-only mode
-if [ "$MESSAGE_ONLY" = false ]; then
+# Only stage changes and check for changes if not using message-only, branch-name mode, or unstaged mode
+if [ "$MESSAGE_ONLY" = false ] && [ "$BRANCH_NAME_ONLY" = false ] && [ "$UNSTAGED" = false ]; then
     # Stage all changes
     debug_log "Staging all changes"
     git add .
 fi
 
 # Use a single, readable format for all providers (jq will handle JSON escaping)
-CHANGES=$(git diff --cached --name-status | tr '\t' ' ' | sed 's/  */ /g')
+DIFF_RANGE="--cached"
+[ "$UNSTAGED" = true ] && DIFF_RANGE=""
+
+CHANGES=$(git diff $DIFF_RANGE --name-status | tr '\t' ' ' | sed 's/  */ /g')
 # Get git diff for context
-DIFF_CONTENT=$(git diff --cached)
+DIFF_CONTENT=$(git diff $DIFF_RANGE)
 debug_log "Git changes detected" "$CHANGES"
 
 if [ -z "$CHANGES" ]; then
-    echo "No staged changes found. Please stage your changes using 'git add' first."
+    if [ "$UNSTAGED" = true ]; then
+        echo "No unstaged changes found."
+    else
+        echo "No staged changes found. Please stage your changes using 'git add' first or use --unstaged flag."
+    fi
     exit 1
 fi
 
@@ -342,8 +363,34 @@ if [ -z "$MODEL" ]; then
     esac
 fi
 
-# Assemble the user prompt with raw content; jq will escape JSON safely
-USER_CONTENT=$(cat <<EOF
+# Assemble the user prompt with raw content; jq will handle JSON escaping
+if [ "$BRANCH_NAME_ONLY" = true ]; then
+    USER_CONTENT=$(cat <<EOF
+Generate a git branch name for these changes:
+
+## File changes:
+<file_changes>
+$CHANGES
+</file_changes>
+
+## Diff:
+<diff>
+$DIFF_CONTENT
+</diff>
+
+## Format:
+<type>/<short-description>
+
+Important:
+- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore
+- Short description: lowercase, hyphen-separated, max 50 chars
+- Example: fix/api-error-handling or feat/new-login-page
+- Do not wrap your response in triple backticks
+- Response should be the branch name only, no explanations.
+EOF
+)
+else
+    USER_CONTENT=$(cat <<EOF
 Generate a commit message for these changes:
 
 ## File changes:
@@ -371,6 +418,14 @@ Important:
 - Response should be the commit message only, no explanations.
 EOF
 )
+fi
+
+# Define system prompt
+if [ "$BRANCH_NAME_ONLY" = true ]; then
+    SYSTEM_PROMPT="You are a git branch name generator. Create concise, standard git branch names."
+else
+    SYSTEM_PROMPT="You are a git commit message generator. Create conventional commit messages."
+fi
 
 # Make the API request
 case "$PROVIDER" in
@@ -391,11 +446,12 @@ case "$PROVIDER" in
     REQUEST_BODY=$(jq -n \
         --arg model "$MODEL" \
         --arg content "$USER_CONTENT" \
+        --arg system_prompt "$SYSTEM_PROMPT" \
         '{
            model: $model,
            stream: false,
            messages: [
-             {role:"system", content:"You are a git commit message generator. Create conventional commit messages."},
+             {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
          }')
@@ -413,11 +469,12 @@ case "$PROVIDER" in
     REQUEST_BODY=$(jq -n \
         --arg model "$MODEL" \
         --arg content "$USER_CONTENT" \
+        --arg system_prompt "$SYSTEM_PROMPT" \
         '{
            model: $model,
            stream: false,
            messages: [
-             {role:"system", content:"You are a git commit message generator. Create conventional commit messages."},
+             {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
          }')
@@ -430,11 +487,12 @@ case "$PROVIDER" in
     REQUEST_BODY=$(jq -n \
         --arg model "$MODEL" \
         --arg content "$USER_CONTENT" \
+        --arg system_prompt "$SYSTEM_PROMPT" \
         '{
            stream: false,
            model: $model,
            messages: [
-             {role:"system", content:"You are a git commit message generator. Create conventional commit messages."},
+             {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
          }')
@@ -473,8 +531,8 @@ case "$PROVIDER" in
         echo "Error from Ollama: $ERROR"
         exit 1
     fi
-    COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.response // empty')
-    if [ -z "$COMMIT_FULL" ]; then
+    RESULT_MESSAGE=$(echo "$RESPONSE" | jq -r '.response // empty')
+    if [ -z "$RESULT_MESSAGE" ]; then
         echo "Error: Failed to get response from Ollama. Response: $RESPONSE"
         exit 1
     fi
@@ -498,8 +556,8 @@ case "$PROVIDER" in
     fi
 
     # Try to extract content with proper error handling
-    COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null)
-    if [ $? -ne 0 ] || [ -z "$COMMIT_FULL" ] || [ "$COMMIT_FULL" = "null" ]; then
+    RESULT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$RESULT_MESSAGE" ] || [ "$RESULT_MESSAGE" = "null" ]; then
         echo "Error: Failed to parse LMStudio response. Response format may be unexpected."
         echo "Response: $RESPONSE"
         exit 1
@@ -507,11 +565,11 @@ case "$PROVIDER" in
     ;;
 "$PROVIDER_OPENROUTER" | "$PROVIDER_CUSTOM")
     # For OpenRouter and custom providers
-    COMMIT_FULL=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+    RESULT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
 
     # If jq fails or returns null, fallback to grep method
-    if [ -z "$COMMIT_FULL" ] || [ "$COMMIT_FULL" = "null" ]; then
-        COMMIT_FULL=$(echo "$RESPONSE" | grep -o '"content":"[^"]*"' | cut -d'"' -f4)
+    if [ -z "$RESULT_MESSAGE" ] || [ "$RESULT_MESSAGE" = "null" ]; then
+        RESULT_MESSAGE=$(echo "$RESPONSE" | grep -o '"content":"[^"]*"' | cut -d'"' -f4)
     fi
     ;;
 esac
@@ -519,28 +577,34 @@ esac
 # Clean the message:
 # 1. Preserve the structure of the commit message
 # 2. Clean up escape sequences
-COMMIT_FULL=$(echo "$COMMIT_FULL" |
+RESULT_MESSAGE=$(echo "$RESULT_MESSAGE" |
     sed 's/\\n/\n/g' |
     sed 's/\\r//g' |
     sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
     sed 's/\\[[:alpha:]]//g')
 
-debug_log "Extracted commit message" "$COMMIT_FULL"
+debug_log "Extracted commit message" "$RESULT_MESSAGE"
 
-if [ -z "$COMMIT_FULL" ]; then
+if [ -z "$RESULT_MESSAGE" ]; then
     echo "Failed to generate commit message. API response:"
     echo "$RESPONSE"
     exit 1
 fi
 
-if [ "$MESSAGE_ONLY" = true ]; then
-    echo "$COMMIT_FULL"
+if [ "$MESSAGE_ONLY" = true ] || [ "$BRANCH_NAME_ONLY" = true ]; then
+    echo "$RESULT_MESSAGE"
     exit 0
+fi
+
+# If we were in unstaged mode, we need to stage changes before committing
+if [ "$UNSTAGED" = true ]; then
+    debug_log "Staging all changes before commit"
+    git add .
 fi
 
 # Execute git commit
 debug_log "Executing git commit"
-git commit -m "$COMMIT_FULL"
+git commit -m "$RESULT_MESSAGE"
 
 if [ $? -ne 0 ]; then
     echo "Failed to commit changes"
@@ -560,5 +624,5 @@ if [ "$PUSH" = true ]; then
 fi
 
 echo "Successfully committed and pushed changes with message:"
-echo "$COMMIT_FULL"
+echo "$RESULT_MESSAGE"
 debug_log "Script completed successfully"
