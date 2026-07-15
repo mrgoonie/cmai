@@ -45,6 +45,31 @@ debug_log() {
     fi
 }
 
+debug_log_file() {
+    if [ "$DEBUG" = true ]; then
+        echo "DEBUG: $1"
+        echo "DEBUG: Content >>>"
+        if [ -f "${2:-}" ] && [ -r "${2:-}" ]; then
+            cat "$2"
+        else
+            echo "(empty, missing, or unreadable file)"
+        fi
+        echo "DEBUG: <<<"
+    fi
+}
+
+fail() {
+    echo "Error: $1" 1>&2
+    exit 1
+}
+
+cleanup() {
+    if [ -n "${TEMP_DIR:-}" ] && [ "$TEMP_DIR" != "/" ] && [ -d "$TEMP_DIR" ]; then
+        rm -f "$TEMP_DIR/prompt" "$TEMP_DIR/request.json"
+        rmdir "$TEMP_DIR" 2>/dev/null || true
+    fi
+}
+
 # Collect untracked files and represent them as added files in the prompt context.
 get_untracked_changes() {
     local files=""
@@ -485,6 +510,15 @@ else
     SYSTEM_PROMPT="You are a git commit message generator. Create conventional commit messages."
 fi
 
+# Keep large prompts and request bodies out of command arguments. Passing a
+# large diff through `jq --arg` or `curl -d` can exceed the OS argument limit.
+TEMP_DIR=""
+trap cleanup EXIT
+TEMP_DIR=$(mktemp -d) || fail "Failed to create temporary directory"
+PROMPT_FILE="$TEMP_DIR/prompt"
+REQUEST_FILE="$TEMP_DIR/request.json"
+printf '%s' "$USER_CONTENT" >"$PROMPT_FILE" || fail "Failed to write prompt to temporary file"
+
 # Make the API request
 case "$PROVIDER" in
 "$PROVIDER_OLLAMA")
@@ -492,18 +526,19 @@ case "$PROVIDER" in
     ENDPOINT="api/generate"
     HEADERS=(-H "Content-Type: application/json")
     BASE_URL="http://localhost:11434"
-    REQUEST_BODY=$(jq -n \
+    jq -n \
         --arg model "$MODEL" \
-        --arg prompt "$USER_CONTENT" \
-        '{model:$model, prompt:$prompt, stream:false}')
+        --rawfile prompt "$PROMPT_FILE" \
+        '{model:$model, prompt:$prompt, stream:false}' >"$REQUEST_FILE" ||
+        fail "Failed to generate request JSON"
     ;;
 "$PROVIDER_LMSTUDIO")
     debug_log "Making API request to LMStudio"
     ENDPOINT="chat/completions"
     HEADERS=(-H "Content-Type: application/json")
-    REQUEST_BODY=$(jq -n \
+    jq -n \
         --arg model "$MODEL" \
-        --arg content "$USER_CONTENT" \
+        --rawfile content "$PROMPT_FILE" \
         --arg system_prompt "$SYSTEM_PROMPT" \
         '{
            model: $model,
@@ -512,8 +547,9 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }')
-    debug_log "LMStudio request body:" "$REQUEST_BODY"
+         }' >"$REQUEST_FILE" ||
+        fail "Failed to generate request JSON"
+    debug_log_file "LMStudio request body:" "$REQUEST_FILE"
     ;;
 "$PROVIDER_OPENROUTER")
     debug_log "Making API request to OpenRouter"
@@ -524,9 +560,9 @@ case "$PROVIDER" in
         "Content-Type: application/json"
         "X-Title: cmai - AI Commit Message Generator"
     )
-    REQUEST_BODY=$(jq -n \
+    jq -n \
         --arg model "$MODEL" \
-        --arg content "$USER_CONTENT" \
+        --rawfile content "$PROMPT_FILE" \
         --arg system_prompt "$SYSTEM_PROMPT" \
         '{
            model: $model,
@@ -535,16 +571,17 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }')
+         }' >"$REQUEST_FILE" ||
+        fail "Failed to generate request JSON"
     ;;
 "$PROVIDER_CUSTOM")
     debug_log "Making API request to custom provider"
     ENDPOINT="chat/completions"
     HEADERS=(-H "Content-Type: application/json")
     [ -n "$API_KEY" ] && HEADERS+=(-H "Authorization: Bearer ${API_KEY}")
-    REQUEST_BODY=$(jq -n \
+    jq -n \
         --arg model "$MODEL" \
-        --arg content "$USER_CONTENT" \
+        --rawfile content "$PROMPT_FILE" \
         --arg system_prompt "$SYSTEM_PROMPT" \
         '{
            stream: false,
@@ -553,7 +590,8 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }')
+         }' >"$REQUEST_FILE" ||
+        fail "Failed to generate request JSON"
     ;;
 esac
 
@@ -562,7 +600,7 @@ debug_log "Using provider: $PROVIDER"
 debug_log "Provider endpoint: $ENDPOINT"
 debug_log "Request headers: ${HEADERS[*]}"
 debug_log "Request model: ${MODEL}"
-debug_log "Request body: $REQUEST_BODY"
+debug_log_file "Request body:" "$REQUEST_FILE"
 
 # Convert headers array to proper curl format
 CURL_HEADERS=()
@@ -572,7 +610,7 @@ done
 
 RESPONSE=$(curl -s -X POST "$BASE_URL/$ENDPOINT" \
     "${CURL_HEADERS[@]}" \
-    -d "$REQUEST_BODY")
+    --data-binary "@$REQUEST_FILE")
 debug_log "API response received" "$RESPONSE"
 
 # Extract and clean the commit message
