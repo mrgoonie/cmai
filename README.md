@@ -206,6 +206,12 @@ cmai --message-only
 
 This is useful if you want to review the message before committing.
 
+You can also base this on a specific diff target:
+
+```bash
+cmai --message-only --diff main...HEAD
+```
+
 ### Use Unstaged Changes
 
 If you haven't staged your changes yet (with `git add`), you can use the `--unstaged` flag:
@@ -214,7 +220,7 @@ If you haven't staged your changes yet (with `git add`), you can use the `--unst
 cmai --unstaged --message-only
 ```
 
-This will generate a message based on your current changes in the working tree without staging them.
+This will generate a message based on your current unstaged and untracked working tree changes without staging them first.
 
 ### Generate Branch Name Only
 
@@ -226,6 +232,12 @@ cmai --branch-name-only
 
 This will output a branch name like `fix/api-error-handling` or `feat/new-login-page` based on the context of your changes. It does not perform any git operations.
 
+You can also base this on a specific diff target:
+
+```bash
+cmai --branch-name-only --diff HEAD~1..HEAD
+```
+
 ## Command Line Options
 
 ```bash
@@ -236,7 +248,8 @@ Options:
   --push, -p            Push changes after commit
   --message-only        Generate message only, no git add/commit/push
   --branch-name-only    Generate branch name only, no git add/commit/push
-  --unstaged            Use unstaged changes for diff
+  --unstaged            Use unstaged and untracked changes for diff
+  --diff <diff>         Use a custom git diff target for message/branch-only
   --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)
   --use-ollama          Use Ollama as provider (saves for future use)
   --use-lmstudio        Use LMStudio as provider (saves for future use)
