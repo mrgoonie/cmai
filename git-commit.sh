@@ -5,6 +5,13 @@ CONFIG_FILE="$CONFIG_DIR/config"
 MODEL_FILE="$CONFIG_DIR/model"
 BASE_URL_FILE="$CONFIG_DIR/base_url"
 PROVIDER_FILE="$CONFIG_DIR/provider"
+TEMPERATURE_FILE="$CONFIG_DIR/temperature"
+TOP_P_FILE="$CONFIG_DIR/top_p"
+TOP_K_FILE="$CONFIG_DIR/top_k"
+PRESENCE_PENALTY_FILE="$CONFIG_DIR/presence_penalty"
+MAX_TOKENS_FILE="$CONFIG_DIR/max_tokens"
+REASONING_EFFORT_FILE="$CONFIG_DIR/reasoning_effort"
+EXTRA_BODY_FILE="$CONFIG_DIR/extra_body"
 
 # Debug mode flag
 DEBUG=false
@@ -63,9 +70,82 @@ fail() {
     exit 1
 }
 
+save_setting() {
+    local file="$1"
+    local value="$2"
+
+    printf '%s\n' "$value" >"$file"
+    chmod 600 "$file"
+}
+
+get_setting() {
+    local file="$1"
+
+    if [ -f "$file" ]; then
+        cat "$file"
+    fi
+}
+
+validate_decimal_range() {
+    local value="$1"
+    local minimum="$2"
+    local maximum="$3"
+    local option="$4"
+
+    if ! [[ "$value" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] ||
+        ! awk -v value="$value" -v minimum="$minimum" -v maximum="$maximum" \
+            'BEGIN { exit !(value >= minimum && value <= maximum) }'; then
+        fail "$option must be between $minimum and $maximum"
+    fi
+}
+
+validate_positive_integer() {
+    local value="$1"
+    local option="$2"
+
+    if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+        fail "$option must be a positive integer"
+    fi
+}
+
+validate_nonnegative_integer() {
+    local value="$1"
+    local option="$2"
+
+    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+        fail "$option must be a non-negative integer"
+    fi
+}
+
+validate_signed_decimal_range() {
+    local value="$1"
+    local minimum="$2"
+    local maximum="$3"
+    local option="$4"
+
+    if ! [[ "$value" =~ ^-?([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] ||
+        ! awk -v value="$value" -v minimum="$minimum" -v maximum="$maximum" \
+            'BEGIN { exit !(value >= minimum && value <= maximum) }'; then
+        fail "$option must be between $minimum and $maximum"
+    fi
+}
+
+validate_reasoning_effort() {
+    case "$1" in
+    none | minimal | low | medium | high | xhigh | max) ;;
+    *) fail "--reasoning-effort must be one of: none, minimal, low, medium, high, xhigh, max" ;;
+    esac
+}
+
+validate_extra_body() {
+    if ! printf '%s' "$1" | jq -e 'type == "object"' >/dev/null 2>&1; then
+        fail "--extra-body must be a valid JSON object"
+    fi
+}
+
 cleanup() {
     if [ -n "${TEMP_DIR:-}" ] && [ "$TEMP_DIR" != "/" ] && [ -d "$TEMP_DIR" ]; then
-        rm -f "$TEMP_DIR/prompt" "$TEMP_DIR/request.json"
+        rm -f "$TEMP_DIR/prompt" "$TEMP_DIR/request.json" "$TEMP_DIR/extra-body.json"
         rmdir "$TEMP_DIR" 2>/dev/null || true
     fi
 }
@@ -158,6 +238,17 @@ print_config() {
     echo "  Provider:  $(get_provider)"
     echo "  Base URL:  $(get_base_url)"
     echo "  Model:     $(get_model)"
+    echo "  Temperature:      ${TEMPERATURE:-Not set}"
+    echo "  Top P:            ${TOP_P:-Not set}"
+    echo "  Top K:            ${TOP_K:-Not set}"
+    echo "  Presence penalty: ${PRESENCE_PENALTY:-Not set}"
+    echo "  Max tokens:       ${MAX_TOKENS:-Not set}"
+    echo "  Reasoning effort: ${REASONING_EFFORT:-Not set}"
+    if [ -z "$EXTRA_BODY" ]; then
+        echo "  Extra body:       Not set"
+    else
+        echo "  Extra body:       Set"
+    fi
     API_KEY=$(get_api_key)
     if [ -z "$API_KEY" ]; then
         echo "  API Key:   Not set"
@@ -185,6 +276,13 @@ LMSTUDIO_MODEL="default"
 
 # Get saved model or use default based on provider
 MODEL=$(get_model)
+TEMPERATURE=$(get_setting "$TEMPERATURE_FILE")
+TOP_P=$(get_setting "$TOP_P_FILE")
+TOP_K=$(get_setting "$TOP_K_FILE")
+PRESENCE_PENALTY=$(get_setting "$PRESENCE_PENALTY_FILE")
+MAX_TOKENS=$(get_setting "$MAX_TOKENS_FILE")
+REASONING_EFFORT=$(get_setting "$REASONING_EFFORT_FILE")
+EXTRA_BODY=$(get_setting "$EXTRA_BODY_FILE")
 if [ -z "$MODEL" ]; then
     case "$PROVIDER" in
     "$PROVIDER_OLLAMA")
@@ -292,6 +390,14 @@ while [[ $# -gt 0 ]]; do
         echo "  --unstaged            Use unstaged and untracked changes for diff"
         echo "  --diff <diff>         Use a custom git diff target for message/branch-only"
         echo "  --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)"
+        echo "  --temperature <n>     Set sampling temperature (0-2; saves for future use)"
+        echo "  --top-p <n>           Set nucleus sampling probability (0-1; saves for future use)"
+        echo "  --top-k <n>           Set top-k sampling count (non-negative integer)"
+        echo "  --presence-penalty <n>  Set presence penalty (-2 to 2; saves for future use)"
+        echo "  --max-tokens <n>      Set maximum generated tokens (saves for future use)"
+        echo "  --reasoning-effort <level>  Set none/minimal/low/medium/high/xhigh/max"
+        echo "  --extra-body <json>   Merge arbitrary JSON object into request body"
+        echo "  --reset-generation-options  Clear saved generation options"
         echo "  --use-ollama          Use Ollama as provider (saves for future use)"
         echo "  --use-openrouter      Use OpenRouter as provider (saves for future use)"
         echo "  --use-lmstudio        Use LMStudio as provider (saves for future use)"
@@ -320,6 +426,68 @@ while [[ $# -gt 0 ]]; do
             echo "Error: --model requires a valid model name"
             exit 1
         fi
+        ;;
+    --temperature)
+        [ -n "${2:-}" ] && [[ "$2" != -* ]] || fail "--temperature requires a value"
+        validate_decimal_range "$2" 0 2 "--temperature"
+        TEMPERATURE="$2"
+        save_setting "$TEMPERATURE_FILE" "$TEMPERATURE"
+        shift 2
+        ;;
+    --top-p)
+        [ -n "${2:-}" ] && [[ "$2" != -* ]] || fail "--top-p requires a value"
+        validate_decimal_range "$2" 0 1 "--top-p"
+        TOP_P="$2"
+        save_setting "$TOP_P_FILE" "$TOP_P"
+        shift 2
+        ;;
+    --top-k)
+        [ -n "${2:-}" ] && [[ "$2" != -* ]] || fail "--top-k requires a value"
+        validate_nonnegative_integer "$2" "--top-k"
+        TOP_K="$2"
+        save_setting "$TOP_K_FILE" "$TOP_K"
+        shift 2
+        ;;
+    --presence-penalty)
+        [ -n "${2:-}" ] || fail "--presence-penalty requires a value"
+        validate_signed_decimal_range "$2" -2 2 "--presence-penalty"
+        PRESENCE_PENALTY="$2"
+        save_setting "$PRESENCE_PENALTY_FILE" "$PRESENCE_PENALTY"
+        shift 2
+        ;;
+    --max-tokens)
+        [ -n "${2:-}" ] && [[ "$2" != -* ]] || fail "--max-tokens requires a value"
+        validate_positive_integer "$2" "--max-tokens"
+        MAX_TOKENS="$2"
+        save_setting "$MAX_TOKENS_FILE" "$MAX_TOKENS"
+        shift 2
+        ;;
+    --reasoning-effort)
+        [ -n "${2:-}" ] && [[ "$2" != -* ]] || fail "--reasoning-effort requires a value"
+        REASONING_EFFORT=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+        validate_reasoning_effort "$REASONING_EFFORT"
+        save_setting "$REASONING_EFFORT_FILE" "$REASONING_EFFORT"
+        shift 2
+        ;;
+    --extra-body)
+        [ -n "${2:-}" ] || fail "--extra-body requires a JSON object"
+        validate_extra_body "$2"
+        EXTRA_BODY=$(printf '%s' "$2" | jq -c '.')
+        save_setting "$EXTRA_BODY_FILE" "$EXTRA_BODY"
+        shift 2
+        ;;
+    --reset-generation-options)
+        rm -f "$TEMPERATURE_FILE" "$TOP_P_FILE" "$TOP_K_FILE" \
+            "$PRESENCE_PENALTY_FILE" "$MAX_TOKENS_FILE" \
+            "$REASONING_EFFORT_FILE" "$EXTRA_BODY_FILE"
+        TEMPERATURE=""
+        TOP_P=""
+        TOP_K=""
+        PRESENCE_PENALTY=""
+        MAX_TOKENS=""
+        REASONING_EFFORT=""
+        EXTRA_BODY=""
+        shift
         ;;
     --base-url)
         # Check if next argument exists and doesn't start with -
@@ -369,6 +537,13 @@ fi
 if [ -n "$DIFF_SPEC" ] && [ "$MESSAGE_ONLY" = false ] && [ "$BRANCH_NAME_ONLY" = false ]; then
     echo "Error: --diff can only be used with --message-only or --branch-name-only"
     exit 1
+fi
+
+if [ "$PROVIDER" = "$PROVIDER_OLLAMA" ] && [ -n "$REASONING_EFFORT" ]; then
+    case "$REASONING_EFFORT" in
+    none | low | medium | high) ;;
+    *) fail "Ollama supports reasoning effort none, low, medium, or high" ;;
+    esac
 fi
 
 # Set default model based on provider
@@ -517,7 +692,13 @@ trap cleanup EXIT
 TEMP_DIR=$(mktemp -d) || fail "Failed to create temporary directory"
 PROMPT_FILE="$TEMP_DIR/prompt"
 REQUEST_FILE="$TEMP_DIR/request.json"
+EXTRA_BODY_REQUEST_FILE="$TEMP_DIR/extra-body.json"
 printf '%s' "$USER_CONTENT" >"$PROMPT_FILE" || fail "Failed to write prompt to temporary file"
+if [ -n "$EXTRA_BODY" ]; then
+    printf '%s' "$EXTRA_BODY" >"$EXTRA_BODY_REQUEST_FILE" || fail "Failed to write extra request body"
+else
+    printf '%s' '{}' >"$EXTRA_BODY_REQUEST_FILE" || fail "Failed to initialize extra request body"
+fi
 
 # Make the API request
 case "$PROVIDER" in
@@ -529,7 +710,23 @@ case "$PROVIDER" in
     jq -n \
         --arg model "$MODEL" \
         --rawfile prompt "$PROMPT_FILE" \
-        '{model:$model, prompt:$prompt, stream:false}' >"$REQUEST_FILE" ||
+        --arg temperature "$TEMPERATURE" \
+        --arg top_p "$TOP_P" \
+        --arg top_k "$TOP_K" \
+        --arg presence_penalty "$PRESENCE_PENALTY" \
+        --arg max_tokens "$MAX_TOKENS" \
+        --arg reasoning_effort "$REASONING_EFFORT" \
+        --slurpfile extra_body "$EXTRA_BODY_REQUEST_FILE" \
+        '{model:$model, prompt:$prompt, stream:false}
+         | if $temperature == "" then . else .options.temperature = ($temperature | tonumber) end
+         | if $top_p == "" then . else .options.top_p = ($top_p | tonumber) end
+         | if $top_k == "" then . else .options.top_k = ($top_k | tonumber) end
+         | if $presence_penalty == "" then . else .options.presence_penalty = ($presence_penalty | tonumber) end
+         | if $max_tokens == "" then . else .options.num_predict = ($max_tokens | tonumber) end
+         | if $reasoning_effort != "" then
+             .think = (if $reasoning_effort == "none" then false else $reasoning_effort end)
+           else . end
+         | . + $extra_body[0]' >"$REQUEST_FILE" ||
         fail "Failed to generate request JSON"
     ;;
 "$PROVIDER_LMSTUDIO")
@@ -540,6 +737,13 @@ case "$PROVIDER" in
         --arg model "$MODEL" \
         --rawfile content "$PROMPT_FILE" \
         --arg system_prompt "$SYSTEM_PROMPT" \
+        --arg temperature "$TEMPERATURE" \
+        --arg top_p "$TOP_P" \
+        --arg top_k "$TOP_K" \
+        --arg presence_penalty "$PRESENCE_PENALTY" \
+        --arg max_tokens "$MAX_TOKENS" \
+        --arg reasoning_effort "$REASONING_EFFORT" \
+        --slurpfile extra_body "$EXTRA_BODY_REQUEST_FILE" \
         '{
            model: $model,
            stream: false,
@@ -547,7 +751,14 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }' >"$REQUEST_FILE" ||
+         }
+         | if $temperature == "" then . else .temperature = ($temperature | tonumber) end
+         | if $top_p == "" then . else .top_p = ($top_p | tonumber) end
+         | if $top_k == "" then . else .top_k = ($top_k | tonumber) end
+         | if $presence_penalty == "" then . else .presence_penalty = ($presence_penalty | tonumber) end
+         | if $max_tokens == "" then . else .max_tokens = ($max_tokens | tonumber) end
+         | if $reasoning_effort == "" then . else .reasoning_effort = $reasoning_effort end
+         | . + $extra_body[0]' >"$REQUEST_FILE" ||
         fail "Failed to generate request JSON"
     debug_log_file "LMStudio request body:" "$REQUEST_FILE"
     ;;
@@ -564,6 +775,13 @@ case "$PROVIDER" in
         --arg model "$MODEL" \
         --rawfile content "$PROMPT_FILE" \
         --arg system_prompt "$SYSTEM_PROMPT" \
+        --arg temperature "$TEMPERATURE" \
+        --arg top_p "$TOP_P" \
+        --arg top_k "$TOP_K" \
+        --arg presence_penalty "$PRESENCE_PENALTY" \
+        --arg max_tokens "$MAX_TOKENS" \
+        --arg reasoning_effort "$REASONING_EFFORT" \
+        --slurpfile extra_body "$EXTRA_BODY_REQUEST_FILE" \
         '{
            model: $model,
            stream: false,
@@ -571,7 +789,14 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }' >"$REQUEST_FILE" ||
+         }
+         | if $temperature == "" then . else .temperature = ($temperature | tonumber) end
+         | if $top_p == "" then . else .top_p = ($top_p | tonumber) end
+         | if $top_k == "" then . else .top_k = ($top_k | tonumber) end
+         | if $presence_penalty == "" then . else .presence_penalty = ($presence_penalty | tonumber) end
+         | if $max_tokens == "" then . else .max_tokens = ($max_tokens | tonumber) end
+         | if $reasoning_effort == "" then . else .reasoning.effort = $reasoning_effort end
+         | . + $extra_body[0]' >"$REQUEST_FILE" ||
         fail "Failed to generate request JSON"
     ;;
 "$PROVIDER_CUSTOM")
@@ -583,6 +808,13 @@ case "$PROVIDER" in
         --arg model "$MODEL" \
         --rawfile content "$PROMPT_FILE" \
         --arg system_prompt "$SYSTEM_PROMPT" \
+        --arg temperature "$TEMPERATURE" \
+        --arg top_p "$TOP_P" \
+        --arg top_k "$TOP_K" \
+        --arg presence_penalty "$PRESENCE_PENALTY" \
+        --arg max_tokens "$MAX_TOKENS" \
+        --arg reasoning_effort "$REASONING_EFFORT" \
+        --slurpfile extra_body "$EXTRA_BODY_REQUEST_FILE" \
         '{
            stream: false,
            model: $model,
@@ -590,7 +822,14 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }' >"$REQUEST_FILE" ||
+         }
+         | if $temperature == "" then . else .temperature = ($temperature | tonumber) end
+         | if $top_p == "" then . else .top_p = ($top_p | tonumber) end
+         | if $top_k == "" then . else .top_k = ($top_k | tonumber) end
+         | if $presence_penalty == "" then . else .presence_penalty = ($presence_penalty | tonumber) end
+         | if $max_tokens == "" then . else .max_tokens = ($max_tokens | tonumber) end
+         | if $reasoning_effort == "" then . else .reasoning_effort = $reasoning_effort end
+         | . + $extra_body[0]' >"$REQUEST_FILE" ||
         fail "Failed to generate request JSON"
     ;;
 esac
