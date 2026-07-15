@@ -64,8 +64,9 @@ fail() {
 }
 
 cleanup() {
-    if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
-        rm -rf "$TEMP_DIR"
+    if [ -n "${TEMP_DIR:-}" ] && [ "$TEMP_DIR" != "/" ] && [ -d "$TEMP_DIR" ]; then
+        rm -f "$TEMP_DIR/prompt" "$TEMP_DIR/request.json"
+        rmdir "$TEMP_DIR" 2>/dev/null || true
     fi
 }
 
