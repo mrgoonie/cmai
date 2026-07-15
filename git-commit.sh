@@ -49,9 +49,18 @@ debug_log_file() {
     if [ "$DEBUG" = true ]; then
         echo "DEBUG: $1"
         echo "DEBUG: Content >>>"
-        cat "$2"
+        if [ -f "${2:-}" ] && [ -r "${2:-}" ]; then
+            cat "$2"
+        else
+            echo "(empty, missing, or unreadable file)"
+        fi
         echo "DEBUG: <<<"
     fi
+}
+
+fail() {
+    echo "Error: $1" 1>&2
+    exit 1
 }
 
 cleanup() {
@@ -502,14 +511,12 @@ fi
 
 # Keep large prompts and request bodies out of command arguments. Passing a
 # large diff through `jq --arg` or `curl -d` can exceed the OS argument limit.
-TEMP_DIR=$(mktemp -d) || {
-    echo "Error: Failed to create temporary directory"
-    exit 1
-}
+TEMP_DIR=""
 trap cleanup EXIT
+TEMP_DIR=$(mktemp -d) || fail "Failed to create temporary directory"
 PROMPT_FILE="$TEMP_DIR/prompt"
 REQUEST_FILE="$TEMP_DIR/request.json"
-printf '%s' "$USER_CONTENT" >"$PROMPT_FILE"
+printf '%s' "$USER_CONTENT" >"$PROMPT_FILE" || fail "Failed to write prompt to temporary file"
 
 # Make the API request
 case "$PROVIDER" in
@@ -521,7 +528,8 @@ case "$PROVIDER" in
     jq -n \
         --arg model "$MODEL" \
         --rawfile prompt "$PROMPT_FILE" \
-        '{model:$model, prompt:$prompt, stream:false}' >"$REQUEST_FILE"
+        '{model:$model, prompt:$prompt, stream:false}' >"$REQUEST_FILE" ||
+        fail "Failed to generate request JSON"
     ;;
 "$PROVIDER_LMSTUDIO")
     debug_log "Making API request to LMStudio"
@@ -538,7 +546,8 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }' >"$REQUEST_FILE"
+         }' >"$REQUEST_FILE" ||
+        fail "Failed to generate request JSON"
     debug_log_file "LMStudio request body:" "$REQUEST_FILE"
     ;;
 "$PROVIDER_OPENROUTER")
@@ -561,7 +570,8 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }' >"$REQUEST_FILE"
+         }' >"$REQUEST_FILE" ||
+        fail "Failed to generate request JSON"
     ;;
 "$PROVIDER_CUSTOM")
     debug_log "Making API request to custom provider"
@@ -579,7 +589,8 @@ case "$PROVIDER" in
              {role:"system", content:$system_prompt},
              {role:"user",   content:$content}
            ]
-         }' >"$REQUEST_FILE"
+         }' >"$REQUEST_FILE" ||
+        fail "Failed to generate request JSON"
     ;;
 esac
 
