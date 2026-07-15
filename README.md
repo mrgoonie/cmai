@@ -251,6 +251,14 @@ Options:
   --unstaged            Use unstaged and untracked changes for diff
   --diff <diff>         Use a custom git diff target for message/branch-only
   --model <model>       Use specific model (default: google/gemini-flash-1.5-8b)
+  --temperature <n>     Set sampling temperature (0-2; saves for future use)
+  --top-p <n>           Set nucleus sampling probability (0-1; saves for future use)
+  --top-k <n>           Set top-k sampling count (non-negative integer)
+  --presence-penalty <n>  Set presence penalty (-2 to 2; saves for future use)
+  --max-tokens <n>      Set maximum generated tokens (saves for future use)
+  --reasoning-effort <level>  Set none/minimal/low/medium/high/xhigh/max
+  --extra-body <json>   Merge arbitrary JSON object into request body
+  --clear-model-options  Clear saved model options
   --use-ollama          Use Ollama as provider (saves for future use)
   --use-lmstudio        Use LMStudio as provider (saves for future use)
   --use-openrouter      Use OpenRouter as provider (saves for future use)
@@ -336,7 +344,30 @@ cmai --base-url https://api.example.com/v1
 
 # Combine multiple flags
 cmai --debug --push --model your-model --base-url https://api.example.com/v1
+
+# Configure generation and pass provider-specific request fields
+cmai --temperature 0.7 --top-p 0.8 --top-k 40 \
+  --presence-penalty -0.2 --max-tokens 32768 \
+  --extra-body '{"chat_template_kwargs":{"enable_thinking":false}}'
+
+# Configure reasoning effort for a supported model
+cmai --reasoning-effort high
 ```
+
+Generation options persist across runs. OpenRouter receives `reasoning.effort`;
+LM Studio and custom OpenAI-compatible providers receive `reasoning_effort`.
+Supported effort levels depend on the selected model. OpenRouter accepts the
+full listed set, including `none`; `none` is sent explicitly so it disables
+reasoning instead of selecting the model default. For Ollama, only GPT-OSS
+models accept effort levels (`low`, `medium`, or `high`) and cannot use `none`.
+Other Ollama models accept `--reasoning-effort none` as `"think": false`; use
+`--extra-body '{"think":true}'` to enable their boolean thinking mode.
+`--extra-body` accepts any JSON object and merges it last into the raw HTTP
+request, matching the Python SDK's `extra_body` behavior. Extra fields can add
+provider-specific controls or override generated top-level fields. Ollama maps
+generation controls into `options`, including `top_k`, `presence_penalty`, and
+`num_predict` for maximum tokens, before applying the extra body.
+Use `--clear-model-options` to omit all saved model controls again.
 
 Example generated commit messages:
 - `feat(api): add user authentication system`
@@ -357,9 +388,14 @@ Example generated commit messages:
 │   ├── config       # API key
 │   ├── model        # Selected AI model
 │   ├── provider     # Selected provider (openrouter/ollama/custom)
-│   └── base_url     # API base URL
-│   ├── model
-│   └── base_url
+│   ├── base_url     # API base URL
+│   ├── temperature  # Sampling temperature (optional)
+│   ├── top_p        # Nucleus sampling probability (optional)
+│   ├── top_k        # Top-k sampling count (optional)
+│   ├── presence_penalty # Presence penalty (optional)
+│   ├── max_tokens   # Maximum generated tokens (optional)
+│   ├── reasoning_effort # Reasoning level (optional)
+│   └── extra_body    # Arbitrary request JSON fields (optional)
 └── usr/
   └── local/
     └── bin/
