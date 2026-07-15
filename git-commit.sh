@@ -25,6 +25,8 @@ BRANCH_NAME_ONLY=false
 UNSTAGED=false
 # Explicit git diff target
 DIFF_SPEC=""
+# Track delayed persistence until provider-specific validation succeeds.
+REASONING_EFFORT_CHANGED=false
 # Default providers and URLs
 PROVIDER_OPENROUTER="openrouter"
 PROVIDER_OLLAMA="ollama"
@@ -134,6 +136,27 @@ validate_reasoning_effort() {
     case "$1" in
     none | minimal | low | medium | high | xhigh | max) ;;
     *) fail "--reasoning-effort must be one of: none, minimal, low, medium, high, xhigh, max" ;;
+    esac
+}
+
+validate_ollama_reasoning_effort() {
+    local model
+    local effort="$2"
+
+    model=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    case "$model" in
+    *gpt-oss*)
+        case "$effort" in
+        low | medium | high) ;;
+        none) fail "Ollama GPT-OSS models cannot disable thinking" ;;
+        *) fail "Ollama GPT-OSS reasoning effort must be low, medium, or high" ;;
+        esac
+        ;;
+    *)
+        if [ "$effort" != "none" ]; then
+            fail "Ollama reasoning effort levels are only supported by GPT-OSS models; use --extra-body with a boolean think field for this model"
+        fi
+        ;;
     esac
 }
 
@@ -397,7 +420,7 @@ while [[ $# -gt 0 ]]; do
         echo "  --max-tokens <n>      Set maximum generated tokens (saves for future use)"
         echo "  --reasoning-effort <level>  Set none/minimal/low/medium/high/xhigh/max"
         echo "  --extra-body <json>   Merge arbitrary JSON object into request body"
-        echo "  --reset-generation-options  Clear saved generation options"
+        echo "  --clear-model-options  Clear saved model options"
         echo "  --use-ollama          Use Ollama as provider (saves for future use)"
         echo "  --use-openrouter      Use OpenRouter as provider (saves for future use)"
         echo "  --use-lmstudio        Use LMStudio as provider (saves for future use)"
@@ -466,7 +489,7 @@ while [[ $# -gt 0 ]]; do
         [ -n "${2:-}" ] && [[ "$2" != -* ]] || fail "--reasoning-effort requires a value"
         REASONING_EFFORT=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
         validate_reasoning_effort "$REASONING_EFFORT"
-        save_setting "$REASONING_EFFORT_FILE" "$REASONING_EFFORT"
+        REASONING_EFFORT_CHANGED=true
         shift 2
         ;;
     --extra-body)
@@ -476,7 +499,7 @@ while [[ $# -gt 0 ]]; do
         save_setting "$EXTRA_BODY_FILE" "$EXTRA_BODY"
         shift 2
         ;;
-    --reset-generation-options)
+    --clear-model-options)
         rm -f "$TEMPERATURE_FILE" "$TOP_P_FILE" "$TOP_K_FILE" \
             "$PRESENCE_PENALTY_FILE" "$MAX_TOKENS_FILE" \
             "$REASONING_EFFORT_FILE" "$EXTRA_BODY_FILE"
@@ -486,6 +509,7 @@ while [[ $# -gt 0 ]]; do
         PRESENCE_PENALTY=""
         MAX_TOKENS=""
         REASONING_EFFORT=""
+        REASONING_EFFORT_CHANGED=false
         EXTRA_BODY=""
         shift
         ;;
@@ -540,10 +564,11 @@ if [ -n "$DIFF_SPEC" ] && [ "$MESSAGE_ONLY" = false ] && [ "$BRANCH_NAME_ONLY" =
 fi
 
 if [ "$PROVIDER" = "$PROVIDER_OLLAMA" ] && [ -n "$REASONING_EFFORT" ]; then
-    case "$REASONING_EFFORT" in
-    none | low | medium | high) ;;
-    *) fail "Ollama supports reasoning effort none, low, medium, or high" ;;
-    esac
+    validate_ollama_reasoning_effort "$MODEL" "$REASONING_EFFORT"
+fi
+
+if [ "$REASONING_EFFORT_CHANGED" = true ]; then
+    save_setting "$REASONING_EFFORT_FILE" "$REASONING_EFFORT"
 fi
 
 # Set default model based on provider

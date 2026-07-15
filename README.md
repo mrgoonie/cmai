@@ -258,7 +258,7 @@ Options:
   --max-tokens <n>      Set maximum generated tokens (saves for future use)
   --reasoning-effort <level>  Set none/minimal/low/medium/high/xhigh/max
   --extra-body <json>   Merge arbitrary JSON object into request body
-  --reset-generation-options  Clear saved generation options
+  --clear-model-options  Clear saved model options
   --use-ollama          Use Ollama as provider (saves for future use)
   --use-lmstudio        Use LMStudio as provider (saves for future use)
   --use-openrouter      Use OpenRouter as provider (saves for future use)
@@ -356,12 +356,18 @@ cmai --reasoning-effort high
 
 Generation options persist across runs. OpenRouter receives `reasoning.effort`;
 LM Studio and custom OpenAI-compatible providers receive `reasoning_effort`.
+Supported effort levels depend on the selected model. OpenRouter accepts the
+full listed set, including `none`; `none` is sent explicitly so it disables
+reasoning instead of selecting the model default. For Ollama, only GPT-OSS
+models accept effort levels (`low`, `medium`, or `high`) and cannot use `none`.
+Other Ollama models accept `--reasoning-effort none` as `"think": false`; use
+`--extra-body '{"think":true}'` to enable their boolean thinking mode.
 `--extra-body` accepts any JSON object and merges it last into the raw HTTP
 request, matching the Python SDK's `extra_body` behavior. Extra fields can add
 provider-specific controls or override generated top-level fields. Ollama maps
 generation controls into `options`, including `top_k`, `presence_penalty`, and
 `num_predict` for maximum tokens, before applying the extra body.
-Use `--reset-generation-options` to omit all saved generation controls again.
+Use `--clear-model-options` to omit all saved model controls again.
 
 Example generated commit messages:
 - `feat(api): add user authentication system`
