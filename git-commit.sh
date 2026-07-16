@@ -185,6 +185,23 @@ response_excerpt() {
     printf '%s' "$1" | tr '\r\n' '  ' | cut -c1-300
 }
 
+truncate_file_at_line_boundary() {
+    local file="$1"
+    local max_bytes="$2"
+
+    LC_ALL=C awk -v max_bytes="$max_bytes" '
+        {
+            line = $0 ORS
+            line_bytes = length(line)
+            if (bytes + line_bytes > max_bytes) {
+                exit
+            }
+            printf "%s", line
+            bytes += line_bytes
+        }
+    ' "$file"
+}
+
 # Collect untracked files and represent them as added files in the prompt context.
 get_untracked_changes() {
     local files=""
@@ -704,9 +721,9 @@ fi
 
 DIFF_BYTES=$(wc -c <"$DIFF_FILE")
 if [ "$DIFF_BYTES" -gt "$DIFF_BUDGET_BYTES" ]; then
-    DIFF_CONTENT=$(head -c "$DIFF_BUDGET_BYTES" "$DIFF_FILE")
-    DIFF_CONTENT+=$'\n\n'"[Diff truncated after $DIFF_BUDGET_BYTES bytes.]"
-    debug_log "Diff truncated from $DIFF_BYTES to $DIFF_BUDGET_BYTES bytes"
+    DIFF_CONTENT=$(truncate_file_at_line_boundary "$DIFF_FILE" "$DIFF_BUDGET_BYTES")
+    DIFF_CONTENT+=$'\n\n'"[Diff truncated to $DIFF_BUDGET_BYTES-byte budget.]"
+    debug_log "Diff truncated from $DIFF_BYTES bytes to $DIFF_BUDGET_BYTES-byte budget"
 else
     DIFF_CONTENT=$(cat "$DIFF_FILE")
 fi
@@ -966,7 +983,7 @@ if ! printf '%s' "$RESPONSE" | jq -e 'type == "object"' >/dev/null 2>&1; then
     fail "Provider returned invalid JSON (HTTP $HTTP_STATUS): $ERROR"
 fi
 
-if printf '%s' "$RESPONSE" | jq -e '.error != null' >/dev/null 2>&1; then
+if printf '%s' "$RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
     ERROR=$(printf '%s' "$RESPONSE" |
         jq -r '.error.message // .error | if type == "string" then . else tostring end')
     fail "Provider error: $ERROR"

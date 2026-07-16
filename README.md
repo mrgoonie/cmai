@@ -209,7 +209,8 @@ This is useful if you want to review the message before committing.
 Diff context is capped from the configured model context window. CMAI defaults
 to 131,072 context tokens, reserves 4,096 output tokens when no output limit is
 set, keeps a 10% safety margin, and uses a conservative byte-based estimate.
-For larger changes, CMAI keeps the file list and truncates the diff.
+For larger changes, CMAI keeps the file list and truncates the diff at a
+complete line boundary.
 `--max-context-tokens` only controls prompt budgeting; it is not sent to the
 provider. When `--max-output-tokens` is omitted, the 4,096-token reserve only
 affects budgeting and no output limit is sent.

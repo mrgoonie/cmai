@@ -26,10 +26,15 @@ mkdir -p "$TEST_DIR/bin" "$TEST_DIR/home/.config/git-commit-ai" "$TEST_DIR/repo"
 printf '%s\n' custom >"$TEST_DIR/home/.config/git-commit-ai/provider"
 printf '%s\n' https://provider.test/v1 >"$TEST_DIR/home/.config/git-commit-ai/base_url"
 printf '%s\n' test-model >"$TEST_DIR/home/.config/git-commit-ai/model"
+printf '%s\n' 999999 >"$TEST_DIR/home/.config/git-commit-ai/max_tokens"
 
 export HOME="$TEST_DIR/home"
 export PATH="$TEST_DIR/bin:$PATH"
 export TEST_STATE="$TEST_DIR/state"
+
+"$SCRIPT" --print-config >"$TEST_DIR/output" 2>"$TEST_DIR/error" ||
+    fail_test "print config with legacy setting failed"
+assert_contains "$TEST_DIR/output" "Max output tokens:  Not set"
 
 cat >"$TEST_DIR/bin/curl" <<'EOF'
 #!/bin/bash
@@ -67,16 +72,33 @@ chmod +x "$TEST_DIR/bin/curl"
     cd "$TEST_DIR/repo" || exit 1
     git init -q
     : >isenstedt-pg-ph-f3tv6x-a-p3rucw-20260716-103832.log
-    awk 'BEGIN { for (i = 0; i < 25000; i++) print "Thu, 16 Oct 2025 [CRITICAL] database connection failed with a long stack trace" }' \
+    awk 'BEGIN { for (i = 0; i < 25000; i++) { printf "[CRITICAL] xx"; for (j = 0; j < 40; j++) printf "€"; print "" } }' \
         >isenstedt-pg-ph-f3tv6x-a-p3rucw-20260716-122750.log
     git add .
 ) || fail_test "failed to create fixture repository"
 
-export FAKE_HTTP_STATUS=200
-export FAKE_RESPONSE_BODY='{"choices":[{"message":{"content":"chore(logs): add diagnostic logs"}}]}'
+# Ensure this fixture would expose byte-wise truncation splitting a UTF-8 code point.
 if ! (
     cd "$TEST_DIR/repo" || exit 1
-    "$SCRIPT" --message-only
+    changes=$(git diff --name-status --cached | tr '\t' ' ' | sed 's/  */ /g')
+    changes_bytes=$(printf '%s' "$changes" | wc -c)
+    diff_budget=$((131071 * 90 / 100 - 4096 - 4096 - changes_bytes))
+    git diff --cached >"$TEST_DIR/state/full-diff"
+    head -c "$diff_budget" "$TEST_DIR/state/full-diff" >"$TEST_DIR/state/byte-truncated-diff"
+    last_byte=$(tail -c 1 "$TEST_DIR/state/byte-truncated-diff" | od -An -tx1 | tr -d ' \n')
+    if [ "$last_byte" != e2 ] && [ "$last_byte" != 82 ]; then
+        echo "fixture ended with byte $last_byte" 1>&2
+        exit 1
+    fi
+); then
+    fail_test "UTF-8 fixture does not split a code point under byte-wise truncation"
+fi
+
+export FAKE_HTTP_STATUS=200
+export FAKE_RESPONSE_BODY='{"error":false,"choices":[{"message":{"content":"chore(logs): add diagnostic logs"}}]}'
+if ! (
+    cd "$TEST_DIR/repo" || exit 1
+    "$SCRIPT" --message-only --max-context-tokens 131071
 ) >"$TEST_DIR/output" 2>"$TEST_DIR/error"; then
     fail_test "large diff request failed"
 fi
@@ -87,7 +109,10 @@ fi
     fail_test "prompt exceeded bounded diff size"
 assert_contains "$TEST_DIR/state/prompt" "isenstedt-pg-ph-f3tv6x-a-p3rucw-20260716-103832.log"
 assert_contains "$TEST_DIR/state/prompt" "isenstedt-pg-ph-f3tv6x-a-p3rucw-20260716-122750.log"
-assert_contains "$TEST_DIR/state/prompt" "[Diff truncated after "
+assert_contains "$TEST_DIR/state/prompt" "[Diff truncated to "
+if grep -Fq '�' "$TEST_DIR/state/prompt"; then
+    fail_test "diff truncation introduced invalid UTF-8 replacement character"
+fi
 if ! jq -e 'has("max_tokens") | not' "$TEST_DIR/state/request.json" >/dev/null; then
     fail_test "default output reserve was sent as an API limit"
 fi
