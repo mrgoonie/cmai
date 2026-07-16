@@ -206,6 +206,15 @@ cmai --message-only
 
 This is useful if you want to review the message before committing.
 
+Diff context is capped from the configured model context window. CMAI defaults
+to 131,072 context tokens, reserves 4,096 output tokens when no output limit is
+set, keeps a 10% safety margin, and uses a conservative byte-based estimate.
+For larger changes, CMAI keeps the file list and truncates the diff at a
+complete line boundary.
+`--max-context-tokens` only controls prompt budgeting; it is not sent to the
+provider. When `--max-output-tokens` is omitted, the 4,096-token reserve only
+affects budgeting and no output limit is sent.
+
 You can also base this on a specific diff target:
 
 ```bash
@@ -255,7 +264,8 @@ Options:
   --top-p <n>           Set nucleus sampling probability (0-1; saves for future use)
   --top-k <n>           Set top-k sampling count (non-negative integer)
   --presence-penalty <n>  Set presence penalty (-2 to 2; saves for future use)
-  --max-tokens <n>      Set maximum generated tokens (saves for future use)
+  --max-output-tokens <n>  Set maximum generated tokens (saves for future use)
+  --max-context-tokens <n> Set model context window (default: 131072)
   --reasoning-effort <level>  Set none/minimal/low/medium/high/xhigh/max
   --extra-body <json>   Merge arbitrary JSON object into request body
   --clear-model-options  Clear saved model options
@@ -347,7 +357,8 @@ cmai --debug --push --model your-model --base-url https://api.example.com/v1
 
 # Configure generation and pass provider-specific request fields
 cmai --temperature 0.7 --top-p 0.8 --top-k 40 \
-  --presence-penalty -0.2 --max-tokens 32768 \
+  --presence-penalty -0.2 --max-output-tokens 4096 \
+  --max-context-tokens 262144 \
   --extra-body '{"chat_template_kwargs":{"enable_thinking":false}}'
 
 # Configure reasoning effort for a supported model
