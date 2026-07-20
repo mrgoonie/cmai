@@ -186,4 +186,27 @@ if grep -Fq "jq: parse error" "$TEST_DIR/error"; then
     fail_test "raw jq parse error leaked to user"
 fi
 
+# Large untracked files must not be round-tripped through shell pattern matching:
+# quadratic matching made a 2MB file take >20 minutes. Guard with a hard timeout.
+(
+    cd "$TEST_DIR/repo" || exit 1
+    awk 'BEGIN { for (i = 0; i < 60000; i++) print "[CRITICAL] untracked noise line for unstaged diff" }' \
+        >untracked-large.log
+    printf 'small untracked file\n' >untracked-small.txt
+) || fail_test "failed to create untracked fixtures"
+
+export FAKE_HTTP_STATUS=200
+export FAKE_RESPONSE_BODY='{"error":false,"choices":[{"message":{"content":"chore(logs): add untracked logs"}}]}'
+if ! (
+    cd "$TEST_DIR/repo" || exit 1
+    timeout 60 "$SCRIPT" --message-only --unstaged
+) >"$TEST_DIR/output" 2>"$TEST_DIR/error"; then
+    fail_test "unstaged run with large untracked file failed or timed out"
+fi
+[ "$(cat "$TEST_DIR/output")" = "chore(logs): add untracked logs" ] ||
+    fail_test "generated message was not returned for unstaged run"
+assert_contains "$TEST_DIR/state/prompt" "A untracked-large.log"
+assert_contains "$TEST_DIR/state/prompt" "A untracked-small.txt"
+assert_contains "$TEST_DIR/state/prompt" "[Diff truncated to "
+
 echo "PASS: git-commit tests"
