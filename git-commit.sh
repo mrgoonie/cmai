@@ -203,18 +203,16 @@ truncate_file_at_line_boundary() {
 }
 
 # Collect untracked files and represent them as added files in the prompt context.
+# Prints the file list on stdout and appends the diffs to the given file, keeping
+# large diffs out of shell strings (pattern matching on them is quadratic).
 get_untracked_changes() {
-    local files=""
-    local diffs=""
+    local diff_file="$1"
     local file=""
 
     while IFS= read -r -d '' file; do
-        files+="A $file"$'\n'
-        diffs+=$(git diff --no-index -- /dev/null "$file" 2>/dev/null || true)
-        diffs+=$'\n'
+        printf 'A %s\n' "$file"
+        git diff --no-index -- /dev/null "$file" >>"$diff_file" 2>/dev/null || true
     done < <(git ls-files --others --exclude-standard -z)
-
-    printf '%s\n__CMAI_SPLIT__\n%s' "$files" "$diffs"
 }
 
 # Function to save API key
@@ -683,16 +681,10 @@ CHANGES=$(git diff --name-status "${DIFF_ARGS[@]}" | tr '\t' ' ' | sed 's/  */ /
 git diff "${DIFF_ARGS[@]}" >"$DIFF_FILE" || fail "Failed to read git diff"
 
 if [ "$UNSTAGED" = true ]; then
-    UNTRACKED_DATA=$(get_untracked_changes)
-    UNTRACKED_CHANGES=${UNTRACKED_DATA%%$'\n'__CMAI_SPLIT__*}
-    UNTRACKED_DIFF=${UNTRACKED_DATA#*__CMAI_SPLIT__$'\n'}
+    UNTRACKED_CHANGES=$(get_untracked_changes "$DIFF_FILE")
 
     if [ -n "$UNTRACKED_CHANGES" ]; then
-        CHANGES="${CHANGES}${CHANGES:+$'\n'}${UNTRACKED_CHANGES%$'\n'}"
-    fi
-
-    if [ -n "$UNTRACKED_DIFF" ]; then
-        printf '\n%s' "${UNTRACKED_DIFF%$'\n'}" >>"$DIFF_FILE"
+        CHANGES="${CHANGES}${CHANGES:+$'\n'}${UNTRACKED_CHANGES}"
     fi
 fi
 
