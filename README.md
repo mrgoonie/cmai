@@ -489,7 +489,7 @@ MIT License - see LICENSE file for details
 
 ## My other products
 
-- AgentKit.best - Production-ready Toolkits for Your Agents
+- [AgentKit.best](https://agentkit.best) - Production-ready Toolkits for Your Agents
 
 - [DigiCord AI](https://digicord.site) - The Most Useful AI Chatbot on Discord
 - [IndieBacklink.com](https://indiebacklink.com) - Indie Makers Unite: Feature, Support, Succeed
