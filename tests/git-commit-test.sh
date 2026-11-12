@@ -41,6 +41,7 @@ cat >"$TEST_DIR/bin/curl" <<'EOF'
 
 output_file=""
 request_file=""
+printf '%s\n' "$@" >"$TEST_STATE/curl-args-all"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -61,6 +62,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+cat >"$TEST_STATE/curl-stdin"
 jq -r '.messages[1].content' "$request_file" >"$TEST_STATE/prompt"
 cp "$request_file" "$TEST_STATE/request.json"
 printf '%s' "$FAKE_RESPONSE_BODY" >"$output_file"
@@ -208,5 +210,51 @@ fi
 assert_contains "$TEST_DIR/state/prompt" "A untracked-large.log"
 assert_contains "$TEST_DIR/state/prompt" "A untracked-small.txt"
 assert_contains "$TEST_DIR/state/prompt" "[Diff truncated to "
+
+# The API key must reach curl on stdin and never as a command argument, which
+# other local users can read from the process list.
+printf '%s\n' saved-secret-key >"$TEST_DIR/home/.config/git-commit-ai/config"
+if ! (
+    cd "$TEST_DIR/repo" || exit 1
+    "$SCRIPT" --message-only
+) >"$TEST_DIR/output" 2>"$TEST_DIR/error"; then
+    fail_test "request with saved API key failed"
+fi
+assert_contains "$TEST_STATE/curl-stdin" "Authorization: Bearer saved-secret-key"
+assert_contains "$TEST_STATE/curl-stdin" "Content-Type: application/json"
+if grep -Fq "saved-secret-key" "$TEST_STATE/curl-args-all"; then
+    fail_test "API key was passed to curl as a command argument"
+fi
+
+# CMAI_API_KEY takes precedence over the saved key and is never saved.
+if ! (
+    cd "$TEST_DIR/repo" || exit 1
+    CMAI_API_KEY=env-secret-key "$SCRIPT" --message-only
+) >"$TEST_DIR/output" 2>"$TEST_DIR/error"; then
+    fail_test "request with CMAI_API_KEY failed"
+fi
+assert_contains "$TEST_STATE/curl-stdin" "Authorization: Bearer env-secret-key"
+if grep -Fq "saved-secret-key" "$TEST_STATE/curl-stdin"; then
+    fail_test "saved API key was used although CMAI_API_KEY is set"
+fi
+[ "$(cat "$TEST_DIR/home/.config/git-commit-ai/config")" = saved-secret-key ] ||
+    fail_test "CMAI_API_KEY overwrote the saved API key"
+
+rm "$TEST_DIR/home/.config/git-commit-ai/config"
+CMAI_API_KEY=env-secret-key "$SCRIPT" --print-config >"$TEST_DIR/output" 2>"$TEST_DIR/error" ||
+    fail_test "print config with CMAI_API_KEY failed"
+assert_contains "$TEST_DIR/output" "API Key:   **** (from CMAI_API_KEY)"
+if grep -Fq "env-secret-key" "$TEST_DIR/output"; then
+    fail_test "print config leaked CMAI_API_KEY"
+fi
+if ! (
+    cd "$TEST_DIR/repo" || exit 1
+    CMAI_API_KEY=env-secret-key "$SCRIPT" --message-only --debug
+) >"$TEST_DIR/output" 2>"$TEST_DIR/error"; then
+    fail_test "debug request with CMAI_API_KEY failed"
+fi
+if grep -Fq "env-secret-key" "$TEST_DIR/output" "$TEST_DIR/error"; then
+    fail_test "debug output leaked the API key"
+fi
 
 echo "PASS: git-commit tests"

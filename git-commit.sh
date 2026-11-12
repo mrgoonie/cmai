@@ -225,9 +225,12 @@ save_api_key() {
     debug_log "API key saved to config file"
 }
 
-# Function to get API key
+# Function to get API key. CMAI_API_KEY takes precedence over the saved key, so
+# that the key can come from a keychain or secret manager and never touch disk.
 get_api_key() {
-    if [ -f "$CONFIG_FILE" ]; then
+    if [ -n "${CMAI_API_KEY:-}" ]; then
+        printf '%s\n' "$CMAI_API_KEY"
+    elif [ -f "$CONFIG_FILE" ]; then
         cat "$CONFIG_FILE"
     else
         echo ""
@@ -303,6 +306,8 @@ print_config() {
     API_KEY=$(get_api_key)
     if [ -z "$API_KEY" ]; then
         echo "  API Key:   Not set"
+    elif [ -n "${CMAI_API_KEY:-}" ]; then
+        echo "  API Key:   **** (from CMAI_API_KEY)"
     else
         echo "  API Key:   ****"
     fi
@@ -458,6 +463,9 @@ while [[ $# -gt 0 ]]; do
         echo "  --use-custom <url>    Use custom provider with base URL (saves for future use)"
         echo "  --print-config        Print the current config"
         echo "  -h, --help            Show this help message"
+        echo ""
+        echo "Environment:"
+        echo "  CMAI_API_KEY          API key to use instead of the saved key (never saved)"
         echo ""
         echo "Examples:"
         echo "  cmai --api-key your_api_key          # First time setup with API key"
@@ -809,7 +817,7 @@ case "$PROVIDER" in
 "$PROVIDER_OLLAMA")
     debug_log "Making API request to Ollama"
     ENDPOINT="api/generate"
-    HEADERS=(-H "Content-Type: application/json")
+    HEADERS=("Content-Type: application/json")
     BASE_URL="http://localhost:11434"
     jq -n \
         --arg model "$MODEL" \
@@ -836,7 +844,7 @@ case "$PROVIDER" in
 "$PROVIDER_LMSTUDIO")
     debug_log "Making API request to LMStudio"
     ENDPOINT="chat/completions"
-    HEADERS=(-H "Content-Type: application/json")
+    HEADERS=("Content-Type: application/json")
     jq -n \
         --arg model "$MODEL" \
         --rawfile content "$PROMPT_FILE" \
@@ -906,8 +914,8 @@ case "$PROVIDER" in
 "$PROVIDER_CUSTOM")
     debug_log "Making API request to custom provider"
     ENDPOINT="chat/completions"
-    HEADERS=(-H "Content-Type: application/json")
-    [ -n "$API_KEY" ] && HEADERS+=(-H "Authorization: Bearer ${API_KEY}")
+    HEADERS=("Content-Type: application/json")
+    [ -n "$API_KEY" ] && HEADERS+=("Authorization: Bearer ${API_KEY}")
     jq -n \
         --arg model "$MODEL" \
         --rawfile content "$PROMPT_FILE" \
@@ -941,20 +949,18 @@ esac
 # Debug
 debug_log "Using provider: $PROVIDER"
 debug_log "Provider endpoint: $ENDPOINT"
-debug_log "Request headers: ${HEADERS[*]}"
+debug_log "Request headers: $(printf '%s; ' "${HEADERS[@]}" | sed 's/\(Authorization: Bearer \)[^;]*/\1****/')"
 debug_log "Request model: ${MODEL}"
 debug_log_file "Request body:" "$REQUEST_FILE"
 
-# Convert headers array to proper curl format
-CURL_HEADERS=()
-for header in "${HEADERS[@]}"; do
-    CURL_HEADERS+=(-H "$header")
-done
-
-HTTP_STATUS=$(curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' \
-    -X POST "$BASE_URL/$ENDPOINT" \
-    "${CURL_HEADERS[@]}" \
-    --data-binary "@$REQUEST_FILE") || fail "API request failed"
+# Send the headers to curl on stdin (-H @-, curl 7.55.0 or later). Command
+# arguments are visible to other local users, and the Authorization header
+# carries the API key.
+HTTP_STATUS=$(printf '%s\n' "${HEADERS[@]}" |
+    curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' \
+        -X POST "$BASE_URL/$ENDPOINT" \
+        -H @- \
+        --data-binary "@$REQUEST_FILE") || fail "API request failed"
 RESPONSE=$(cat "$RESPONSE_FILE")
 debug_log "API response received" "$RESPONSE"
 
