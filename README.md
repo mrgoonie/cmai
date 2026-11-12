@@ -98,6 +98,12 @@ The API key will be securely stored in:
 - Linux/macOS: `~/.config/git-commit-ai/config`
 - Windows: `%USERPROFILE%\.config\git-commit-ai\config`
 
+To keep the API key out of that file, pass it in the `CMAI_API_KEY` environment variable instead, for example from a keychain or secret manager. `CMAI_API_KEY` takes precedence over the saved key and is never saved:
+
+```bash
+CMAI_API_KEY="$(secret-tool lookup service git-commit-ai account api-key)" cmai
+```
+
 ### Ollama (Local)
 
 1. Install Ollama from https://ollama.ai/
